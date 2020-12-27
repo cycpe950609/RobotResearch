@@ -10,5 +10,5 @@ All ROS package
 
 # Packages
 * square_walk_control : 控制機器人走正方形，每五秒轉向
-* random_walk_control : 控制機器人隨機走，每五秒轉向
+* random_controllor : 控制機器人隨機走，每五秒轉向
 
