@@ -10,6 +10,7 @@ project(motion_stable_control)
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   geometry_msgs
+  nav_msgs
   message_generation
   message_runtime
   std_msgs
@@ -124,7 +125,6 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
-
 add_executable(motion_stable_control src/odom_subscriber.cpp)
 
 ## Declare a C++ library
@@ -174,7 +174,7 @@ target_link_libraries(${PROJECT_NAME}
 # Mark executables for installation
 # See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_executables.html
 install(TARGETS motion_stable_control
-  RUNTIME DESTINATION /home/computeruser/rosbot_ws/install/motion_stable_control/
+  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
   #RUNTIME DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 )
 
