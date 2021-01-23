@@ -1,0 +1,10 @@
+#goal definition
+geometry_msgs/Point Goal 
+
+---
+#result definition
+int32 Result
+
+---
+#feedback
+geometry_msgs/Point Position

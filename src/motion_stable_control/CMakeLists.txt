@@ -13,6 +13,8 @@ find_package(catkin REQUIRED COMPONENTS
   nav_msgs
   message_generation
   message_runtime
+  actionlib_msgs
+  actionlib
   std_msgs
 )
 
@@ -77,6 +79,19 @@ find_package(catkin REQUIRED COMPONENTS
 #   DEPENDENCIES
 #   geometry_msgs#   std_msgs
 # )
+add_action_files(
+    DIRECTORY action 
+    FILES 
+    Go2Goal.action
+)
+
+generate_messages(
+    DEPENDENCIES 
+    geometry_msgs 
+    actionlib_msgs 
+    std_msgs 
+)
+
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
@@ -112,6 +127,7 @@ catkin_package(
 #  LIBRARIES motion_stable_control
 #  CATKIN_DEPENDS geometry_msgs message_generation message_runtime rospy std_msgs
 #  DEPENDS system_lib
+    CATKIN_DEPENDS actionlib_msgs
 )
 
 ###########
@@ -123,9 +139,15 @@ catkin_package(
 include_directories(
 # include
   ${catkin_INCLUDE_DIRS}
+  ${Boost_INCLUDE_DIRS}
 )
 
-add_executable(motion_stable_control src/odom_subscriber.cpp)
+add_executable(Go2GoalServer src/Go2GoalServer.cpp)
+add_dependencies(Go2GoalServer ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+
+add_executable(Go2GoalClientTest src/Go2GoalClient.cpp)
+add_dependencies(Go2GoalClientTest ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
@@ -153,7 +175,14 @@ add_executable(motion_stable_control src/odom_subscriber.cpp)
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-target_link_libraries(${PROJECT_NAME}
+# target_link_libraries(${PROJECT_NAME}
+#   ${catkin_LIBRARIES}
+# )
+target_link_libraries(Go2GoalServer
+  ${catkin_LIBRARIES}
+)
+
+target_link_libraries(Go2GoalClientTest
   ${catkin_LIBRARIES}
 )
 
@@ -173,7 +202,7 @@ target_link_libraries(${PROJECT_NAME}
 
 # Mark executables for installation
 # See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_executables.html
-install(TARGETS motion_stable_control
+install(TARGETS Go2GoalServer Go2GoalClientTest
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
   #RUNTIME DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 )
