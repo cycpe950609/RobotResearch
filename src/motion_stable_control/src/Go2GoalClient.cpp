@@ -40,8 +40,13 @@ int main(int argc, char **argv)
     ROS_INFO("Action server started, sending goal.");
     // send a goal to the action
     motion_stable_control::Go2GoalGoal goal;
-    goal.Goal.x = 95;
-    goal.Goal.y = 0;
+    
+    printf("Where do ypu want to go ? \n");
+    scanf("%lf %lf",&goal.Goal.x,&goal.Goal.y);
+
+    ROS_INFO("Go to ( %lf , %lf )",goal.Goal.x,goal.Goal.y);
+    // goal.Goal.x = 95;
+    // goal.Goal.y = 0;
     goal.Goal.z = 0;
     // ac.sendGoal(goal,&finishCallback,&execCallback,&feedbackCallback);
     

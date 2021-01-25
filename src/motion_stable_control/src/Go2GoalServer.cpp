@@ -13,6 +13,7 @@
 #include <actionlib/server/simple_action_server.h>
 #include "motion_stable_control/Go2GoalAction.h"
 #include <string>
+#include "Matrix.h"
 
 #define BURGER_MAX_LIN_VEL  0.22
 #define BURGER_MAX_ANG_VEL  2.84
@@ -63,6 +64,8 @@ int main(int argc, char **argv)
     g2gAS = new Server(nh,"Go2GoalAction",boost::bind(&execCallback, _1),false);//TODO : do we must have this ?
     g2gAS->start();
 
+    ROS_INFO("Motion_Stable_Control Server Start");
+
     ros::spin();
 
     printf("Node is startup");
@@ -80,23 +83,23 @@ void setTurtlebotTwistCallback(const geometry_msgs::Twist& msg)
 void getPoseCallback(const nav_msgs::Odometry::ConstPtr& msg)
 {
     
-    static int count = 0;
-    count++;
-    if(count == 10)
-    {
-        count = 0;
-        ROS_INFO("===================================================");
-    	ROS_INFO("Seq: [%d]", msg->header.seq);
-    	ROS_INFO("Position-> x: [%f], y: [%f], z: [%f]", msg->pose.pose.position.x,msg->pose.pose.position.y, msg->pose.pose.position.z);
-    	// ROS_INFO("Orientation-> x: [%f], y: [%f], z: [%f], w: [%f]", msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z, msg->pose.pose.orientation.w);
-    	// ROS_INFO("Vel-> Linear: [%f], Angular: [%f]", msg->twist.twist.linear.x,msg->twist.twist.angular.z);
-        ROS_INFO("===================================================");
+    // static int count = 0;
+    // count++;
+    // if(count == 10)
+    // {
+    //     count = 0;
+    //     ROS_INFO("===================================================");
+    // 	ROS_INFO("Seq: [%d]", msg->header.seq);
+    // 	ROS_INFO("Position-> x: [%f], y: [%f], z: [%f]", msg->pose.pose.position.x,msg->pose.pose.position.y, msg->pose.pose.position.z);
+    // 	// ROS_INFO("Orientation-> x: [%f], y: [%f], z: [%f], w: [%f]", msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z, msg->pose.pose.orientation.w);
+    // 	// ROS_INFO("Vel-> Linear: [%f], Angular: [%f]", msg->twist.twist.linear.x,msg->twist.twist.angular.z);
+    //     ROS_INFO("===================================================");
 
-    }
+    // }
     
     if(isGo2Goal)
     {
-        ROS_INFO("Is Going to Goal now");
+        // ROS_INFO("Is Going to Goal now");
         //Feedback
         feedback.Position = msg->pose.pose.position;
         g2gAS->publishFeedback(feedback);
@@ -118,16 +121,60 @@ void getPoseCallback(const nav_msgs::Odometry::ConstPtr& msg)
         }
         else
         {
-            ROS_INFO("Update Twist");
-            twist.linear.x = BURGER_MAX_LIN_VEL;
+            //
+            ROS_INFO("TEST1"); 
+            Matrix<double> robot_post_tmp   = { msg->pose.pose.position.x , msg->pose.pose.position.y };
+            Matrix<double> robot_post(2,1);
+            robot_post                      = robot_post_tmp.Transpose();
+            ROS_INFO("TEST2"); 
+            Matrix<double> robot_dest_tmp   = {GoalOfRobot.x,GoalOfRobot.y};
+            Matrix<double> robot_dest(2,1);
+            robot_dest                      = robot_dest_tmp.Transpose();
+
+            ROS_INFO("TEST3"); 
+            Matrix<double> va               = {{1,0},{0,1/1}};
+            ROS_INFO("TEST4"); 
+            Matrix<double> theta            = { { cos(-msg->pose.pose.orientation.z) , sin(-msg->pose.pose.orientation.z) },
+                                                { -sin(-msg->pose.pose.orientation.z) , cos(-msg->pose.pose.orientation.z) }
+            };
+            
+            ROS_INFO("TEST5"); 
+            Matrix<double> e_g2g(2,1);
+            ROS_INFO("TEST5a"); 
+            e_g2g                       = robot_dest - robot_post;
+            ROS_INFO("TEST5b"); 
+            e_g2g                       = e_g2g + 0.001;
+            ROS_INFO("TEST5c"); 
+            
+            const double alpha = 1.0;
+            double k = BURGER_MAX_LIN_VEL*( 1 - exp(-alpha*e_g2g.normf()*e_g2g.normf())/(e_g2g.normf()) );
+
+            ROS_INFO("TEST6"); 
+            Matrix<double> u_g2g(2,1);
+            u_g2g                       = e_g2g * k;
+
+            u_g2g.PrintMatrix();
+
+            ROS_INFO("TEST7"); 
+            Matrix<double> rlt(2,1);
+            Matrix<double> rlt2(2,2);
+            rlt2                        = va.dot(theta);
+            ROS_INFO("TEST8"); 
+            rlt                         = rlt2.dot(u_g2g); 
+            ROS_INFO("TEST9"); 
+            rlt.PrintMatrix();
+
+            twist.linear.x = rlt[0][0];
             twist.linear.y = 0.0;
             twist.linear.z = 0.0;
-
+    
             twist.angular.x = 0.0; 
             twist.angular.y = 0.0; 
-            twist.angular.z = 0.0;
+            twist.angular.z = rlt[1][0];
         }
     	new_twist.publish(twist);
+        ROS_INFO("Update Twist");
+
     }
 
 }
@@ -146,6 +193,8 @@ void execCallback(const motion_stable_control::Go2GoalGoalConstPtr &goal)
     GoalOfRobot.x = goal->Goal.x;
     GoalOfRobot.y = goal->Goal.y;
     GoalOfRobot.z = goal->Goal.z;
+
+    ROS_INFO("Get goal ( %lf , %lf , %lf )",goal->Goal.x , goal->Goal.y , goal->Goal.z);
 
     while(isGo2Goal);
 

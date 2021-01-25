@@ -3,5 +3,8 @@
         "/home/computeruser/robot_ws/devel_isolated/square_walk_control/lib/python2.7/dist-packages",
         "/home/computeruser/catkin_ws/devel/lib/python2.7/dist-packages",
         "/opt/ros/melodic/lib/python2.7/dist-packages"
-    ]
+    ],
+    "files.associations": {
+        "initializer_list": "cpp"
+    }
 }
