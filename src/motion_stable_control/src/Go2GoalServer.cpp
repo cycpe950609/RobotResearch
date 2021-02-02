@@ -141,13 +141,15 @@ void getPoseCallback(const nav_msgs::Odometry::ConstPtr& msg)
             ROS_INFO("TEST5"); 
             Matrix<double> e_g2g(2,1);
             ROS_INFO("TEST5a"); 
-            e_g2g                       = robot_dest - robot_post;
+            // e_g2g                       = robot_dest - robot_post;
+            e_g2g                       = robot_post - robot_dest;
             ROS_INFO("TEST5b"); 
             e_g2g                       = e_g2g + 0.001;
             ROS_INFO("TEST5c"); 
             
             const double alpha = 1.0;
-            double k = BURGER_MAX_LIN_VEL*( 1 - exp(-alpha*e_g2g.normf()*e_g2g.normf())/(e_g2g.normf()) );
+            double k = BURGER_MAX_LIN_VEL*( 1 - (exp( -alpha*e_g2g.normf()*e_g2g.normf() ) ) / (e_g2g.normf()) );
+            // double k = BURGER_MAX_LIN_VEL*( (1 - exp( -alpha*e_g2g.normf()*e_g2g.normf() ))  / (e_g2g.normf()) );
 
             ROS_INFO("TEST6"); 
             Matrix<double> u_g2g(2,1);
@@ -158,9 +160,9 @@ void getPoseCallback(const nav_msgs::Odometry::ConstPtr& msg)
             ROS_INFO("TEST7"); 
             Matrix<double> rlt(2,1);
             Matrix<double> rlt2(2,2);
-            rlt2                        = va.dot(theta);
+            // rlt2                        = va.dot(theta);
             ROS_INFO("TEST8"); 
-            rlt                         = rlt2.dot(u_g2g); 
+            rlt                         = va.dot(theta).dot(u_g2g); 
             ROS_INFO("TEST9"); 
             rlt.PrintMatrix();
 
@@ -172,7 +174,7 @@ void getPoseCallback(const nav_msgs::Odometry::ConstPtr& msg)
             twist.angular.y = 0.0; 
             twist.angular.z = rlt[1][0];
         }
-    	new_twist.publish(twist);
+        new_twist.publish(twist);
         ROS_INFO("Update Twist");
 
     }
@@ -196,8 +198,12 @@ void execCallback(const motion_stable_control::Go2GoalGoalConstPtr &goal)
 
     ROS_INFO("Get goal ( %lf , %lf , %lf )",goal->Goal.x , goal->Goal.y , goal->Goal.z);
 
-    while(isGo2Goal);
+    while(isGo2Goal)
+    {
+//        ROS_INFO("TESTER");
+    }
 
+    ROS_INFO("Go to Goal Success");
     //Test
     // feedback.Position.x = 15; 
     // feedback.Position.y = 16; 
