@@ -14,6 +14,12 @@
 #include "motion_stable_control/Go2GoalAction.h"
 #include <string>
 #include "Matrix.h"
+#include <mutex>
+#include <condition_variable>
+
+// #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+
+#include <tf/tf.h>
 
 #define BURGER_MAX_LIN_VEL  0.22
 #define BURGER_MAX_ANG_VEL  2.84
@@ -30,6 +36,8 @@ void getPoseCallback(const nav_msgs::Odometry::ConstPtr& msg);
 void execCallback(const motion_stable_control::Go2GoalGoalConstPtr &goal);
 // ===============
 // Action Server
+std::condition_variable g_cv;
+std::mutex g_mutex;
 bool isGo2Goal = false;
 // ros::NodeHandle *nh;
 typedef actionlib::SimpleActionServer<motion_stable_control::Go2GoalAction> Server;
@@ -48,7 +56,7 @@ geometry_msgs::Point GoalOfRobot;
 // ===============
 
 ros::Subscriber odom_subscriber;
-ros::Publisher  new_twist;	   
+ros::Publisher  new_twist;	 
 
 int main(int argc, char **argv)
 {
@@ -106,10 +114,12 @@ void getPoseCallback(const nav_msgs::Odometry::ConstPtr& msg)
         // Update Twist
         geometry_msgs::Twist twist;
 
+        ROS_INFO("Position %lf %lf",msg->pose.pose.position.x,msg->pose.pose.position.y);
+        ROS_INFO("DistanceError %lf " , EuclideanDistance(GoalOfRobot , msg->pose.pose.position) );
+
         if(EuclideanDistance(GoalOfRobot , msg->pose.pose.position) <= DistanceError) // Arrive goal
         {
             ROS_INFO("Go2Goal Success");
-            isGo2Goal = false;
             twist.linear.x = 0.0;
             twist.linear.y = 0.0;
             twist.linear.z = 0.0;
@@ -118,53 +128,103 @@ void getPoseCallback(const nav_msgs::Odometry::ConstPtr& msg)
             twist.angular.y = 0.0; 
             twist.angular.z = 0.0;
             g2gAS->setSucceeded();
+
+            g_mutex.lock();
+            isGo2Goal = false;
+            g_mutex.unlock();
+            g_cv.notify_all();
+
         }
         else
         {
             //
-            ROS_INFO("TEST1"); 
+            // ROS_INFO("TEST1"); 
             Matrix<double> robot_post_tmp   = { msg->pose.pose.position.x , msg->pose.pose.position.y };
             Matrix<double> robot_post(2,1);
             robot_post                      = robot_post_tmp.Transpose();
-            ROS_INFO("TEST2"); 
+            robot_post.PrintMatrix();
+            // ROS_INFO("TEST2"); 
             Matrix<double> robot_dest_tmp   = {GoalOfRobot.x,GoalOfRobot.y};
             Matrix<double> robot_dest(2,1);
             robot_dest                      = robot_dest_tmp.Transpose();
 
-            ROS_INFO("TEST3"); 
-            Matrix<double> va               = {{1,0},{0,1/1}};
-            ROS_INFO("TEST4"); 
-            Matrix<double> theta            = { { cos(-msg->pose.pose.orientation.z) , sin(-msg->pose.pose.orientation.z) },
-                                                { -sin(-msg->pose.pose.orientation.z) , cos(-msg->pose.pose.orientation.z) }
+            // ROS_INFO("TEST3"); 
+            double epsilon = 0.1;
+            Matrix<double> va               = {{1,0},{0,1/epsilon}};
+            // ROS_INFO("TEST4"); 
+            // Matrix<double> theta            = { { cos(-msg->pose.pose.orientation.z) , sin(-msg->pose.pose.orientation.z) },
+            //                                     { -sin(-msg->pose.pose.orientation.z) , cos(-msg->pose.pose.orientation.z) }
+            // };
+
+            //Get Euler Angle from Quaternion
+            tf::Quaternion q(
+            msg->pose.pose.orientation.x,
+            msg->pose.pose.orientation.y,
+            msg->pose.pose.orientation.z,
+            msg->pose.pose.orientation.w);
+
+            ROS_INFO("Quaternion %lf , %lf , %lf , %lf",msg->pose.pose.orientation.x,msg->pose.pose.orientation.y,msg->pose.pose.orientation.z,msg->pose.pose.orientation.w);
+
+            tf::Matrix3x3 m(q);
+            double roll, pitch, yaw;
+            m.getRPY(roll, pitch, yaw);
+            ROS_INFO("EulerAngle %lf , %lf , %lf",roll , pitch , yaw);
+
+            // tf2::Quaternion quat_tf;
+            // tf2::fromMsg(msg->pose.pose.orientation, quat_tf);
+            
+            // tf2Scalar angle = quat_tf.getAngle();
+
+            // Matrix<double> theta            = { { cos(msg->pose.pose.orientation.z) , sin(msg->pose.pose.orientation.z) },
+            //                                     { -sin(msg->pose.pose.orientation.z) , cos(msg->pose.pose.orientation.z) }
+            // };
+            // Matrix<double> theta            = { { cos(-yaw) , sin(-yaw) },
+            //                                     { -sin(-yaw) , cos(-yaw) }
+            // };
+            Matrix<double> theta            = { { cos(yaw) , sin(yaw) },
+                                                { -sin(yaw) , cos(yaw) }
             };
             
-            ROS_INFO("TEST5"); 
+            // ROS_INFO("TEST5"); 
             Matrix<double> e_g2g(2,1);
-            ROS_INFO("TEST5a"); 
-            // e_g2g                       = robot_dest - robot_post;
-            e_g2g                       = robot_post - robot_dest;
-            ROS_INFO("TEST5b"); 
+            // ROS_INFO("TEST5a"); 
+            e_g2g                       = robot_dest - robot_post;
+            // e_g2g                       = robot_post - robot_dest;
+            // ROS_INFO("TEST5b"); 
             e_g2g                       = e_g2g + 0.001;
-            ROS_INFO("TEST5c"); 
+            // ROS_INFO("TEST5c"); 
             
-            const double alpha = 1.0;
-            double k = BURGER_MAX_LIN_VEL*( 1 - (exp( -alpha*e_g2g.normf()*e_g2g.normf() ) ) / (e_g2g.normf()) );
-            // double k = BURGER_MAX_LIN_VEL*( (1 - exp( -alpha*e_g2g.normf()*e_g2g.normf() ))  / (e_g2g.normf()) );
+            e_g2g.PrintMatrix();
 
-            ROS_INFO("TEST6"); 
+            const double alpha = 10.0;
+            // double k = BURGER_MAX_LIN_VEL*( 1 - (exp( -alpha*e_g2g.normf()*e_g2g.normf() ) ) / (e_g2g.normf()) );
+            double k = BURGER_MAX_LIN_VEL*( (1 - exp( -alpha*e_g2g.normf()*e_g2g.normf() ))  / (e_g2g.normf()) );
+
+            // ROS_INFO("TEST6"); 
             Matrix<double> u_g2g(2,1);
             u_g2g                       = e_g2g * k;
 
             u_g2g.PrintMatrix();
 
-            ROS_INFO("TEST7"); 
+            // ROS_INFO("TEST7"); 
             Matrix<double> rlt(2,1);
             Matrix<double> rlt2(2,2);
-            // rlt2                        = va.dot(theta);
-            ROS_INFO("TEST8"); 
+            rlt2                        = va.dot(theta);
+            // ROS_INFO("TEST8"); 
             rlt                         = va.dot(theta).dot(u_g2g); 
-            ROS_INFO("TEST9"); 
-            rlt.PrintMatrix();
+            // ROS_INFO("TEST9"); 
+            // ROS_INFO("Print VA ===");
+            // va.PrintMatrix();
+            // ROS_INFO("Print theta ===");
+            // theta.PrintMatrix();
+            // ROS_INFO("Print u_g2g ===");
+            // u_g2g.PrintMatrix();
+            // ROS_INFO("Print rlt2 ===");
+            // rlt2.PrintMatrix();
+            // ROS_INFO("Print rlt ===");
+            // rlt.PrintMatrix();
+            // ROS_INFO("================");
+
 
             twist.linear.x = rlt[0][0];
             twist.linear.y = 0.0;
@@ -175,7 +235,7 @@ void getPoseCallback(const nav_msgs::Odometry::ConstPtr& msg)
             twist.angular.z = rlt[1][0];
         }
         new_twist.publish(twist);
-        ROS_INFO("Update Twist");
+        // ROS_INFO("Update Twist");
 
     }
 
@@ -198,9 +258,10 @@ void execCallback(const motion_stable_control::Go2GoalGoalConstPtr &goal)
 
     ROS_INFO("Get goal ( %lf , %lf , %lf )",goal->Goal.x , goal->Goal.y , goal->Goal.z);
 
-    while(isGo2Goal)
+    std::unique_lock<std::mutex> lock(g_mutex);
+    while(isGo2Goal == true)
     {
-//        ROS_INFO("TESTER");
+        g_cv.wait(lock);
     }
 
     ROS_INFO("Go to Goal Success");

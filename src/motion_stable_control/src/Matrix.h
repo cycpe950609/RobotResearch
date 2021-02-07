@@ -4,7 +4,7 @@
 #include <initializer_list>
 #include <vector>
 
-#define ROS_INTEGRATED
+//#define ROS_INTEGRATED
 
 #ifdef ROS_INTEGRATED
 #include "ros/ros.h"

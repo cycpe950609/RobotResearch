@@ -16,6 +16,10 @@ find_package(catkin REQUIRED COMPONENTS
   actionlib_msgs
   actionlib
   std_msgs
+  tf
+  # tf2
+  # tf2_ros
+  # tf2_geometry_msgs
 )
 
 ## System dependencies are found with CMake's conventions

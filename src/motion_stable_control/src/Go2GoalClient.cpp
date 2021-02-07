@@ -41,7 +41,7 @@ int main(int argc, char **argv)
     // send a goal to the action
     motion_stable_control::Go2GoalGoal goal;
     
-    printf("Where do ypu want to go ? \n");
+    printf("Where do you want to go ? \n");
     scanf("%lf %lf",&goal.Goal.x,&goal.Goal.y);
 
     ROS_INFO("Go to ( %lf , %lf )",goal.Goal.x,goal.Goal.y);
