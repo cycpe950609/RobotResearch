@@ -12,3 +12,4 @@ All ROS package
 * square_walk_control : 控制機器人走正方形，每五秒轉向
 * random_controllor : 控制機器人隨機走，每五秒轉向
 * motion_stable_control : 計算機器人的速度與角速度（Asymptotic Stability）
+* avoid_obstacle_control : 在安全距離內，Turtlebot3會倒行 

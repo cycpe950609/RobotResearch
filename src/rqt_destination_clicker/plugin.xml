@@ -1,0 +1,20 @@
+<library path="src">
+    <class name="MapGraph" type="rqt_destination_clicker.map_graph.MapGraph" base_class_type="rqt_gui_py::Plugin">
+	<description>
+	    Set Robot destination / goal by clicking.
+	</description>
+    <qtgui>
+	<!-- optional grouping...
+	<group>
+	    <label>Group</label>
+	</group>
+	<group>
+	    <label>Subgroup</label>
+	</group>
+	-->
+	<label>Set Robot destination / goal by clicking</label>
+	<icon type="theme">system-help</icon>
+	<statustip>Click to set the Destitution / Goal of Turtlebot</statustip>
+    </qtgui>
+  </class>
+</library>
