@@ -114,8 +114,8 @@ void getPoseCallback(const nav_msgs::Odometry::ConstPtr& msg)
         // Update Twist
         geometry_msgs::Twist twist;
 
-        ROS_INFO("Position %lf %lf",msg->pose.pose.position.x,msg->pose.pose.position.y);
-        ROS_INFO("DistanceError %lf " , EuclideanDistance(GoalOfRobot , msg->pose.pose.position) );
+        // ROS_INFO("Position %lf %lf",msg->pose.pose.position.x,msg->pose.pose.position.y);
+        // ROS_INFO("DistanceError %lf " , EuclideanDistance(GoalOfRobot , msg->pose.pose.position) );
 
         if(EuclideanDistance(GoalOfRobot , msg->pose.pose.position) <= DistanceError) // Arrive goal
         {
@@ -137,12 +137,24 @@ void getPoseCallback(const nav_msgs::Odometry::ConstPtr& msg)
         }
         else
         {
+            if (g2gAS->isPreemptRequested() || !ros::ok())
+            {
+                // Notify action cancellation
+                ROS_INFO("motion_stable_control : Preempted");
+                // Action cancellation and consider action as failure and save to variable
+                g2gAS->setPreempted();
+                g_mutex.lock();
+                isGo2Goal = false;
+                g_mutex.unlock();
+                g_cv.notify_all();
+                return;
+            }
             //
             // ROS_INFO("TEST1"); 
             Matrix<double> robot_post_tmp   = { msg->pose.pose.position.x , msg->pose.pose.position.y };
             Matrix<double> robot_post(2,1);
             robot_post                      = robot_post_tmp.Transpose();
-            robot_post.PrintMatrix();
+            // robot_post.PrintMatrix();
             // ROS_INFO("TEST2"); 
             Matrix<double> robot_dest_tmp   = {GoalOfRobot.x,GoalOfRobot.y};
             Matrix<double> robot_dest(2,1);
@@ -163,12 +175,13 @@ void getPoseCallback(const nav_msgs::Odometry::ConstPtr& msg)
             msg->pose.pose.orientation.z,
             msg->pose.pose.orientation.w);
 
-            ROS_INFO("Quaternion %lf , %lf , %lf , %lf",msg->pose.pose.orientation.x,msg->pose.pose.orientation.y,msg->pose.pose.orientation.z,msg->pose.pose.orientation.w);
+            // ROS_INFO("Quaternion %lf , %lf , %lf , %lf",msg->pose.pose.orientation.x,msg->pose.pose.orientation.y,msg->pose.pose.orientation.z,msg->pose.pose.orientation.w);
 
             tf::Matrix3x3 m(q);
             double roll, pitch, yaw;
             m.getRPY(roll, pitch, yaw);
-            ROS_INFO("EulerAngle %lf , %lf , %lf",roll , pitch , yaw);
+            // ROS_INFO("EulerAngle %lf , %lf , %lf",roll , pitch , yaw);
+            ROS_INFO("EulerYaw %lf " , yaw);
 
             // tf2::Quaternion quat_tf;
             // tf2::fromMsg(msg->pose.pose.orientation, quat_tf);
@@ -194,7 +207,7 @@ void getPoseCallback(const nav_msgs::Odometry::ConstPtr& msg)
             e_g2g                       = e_g2g + 0.001;
             // ROS_INFO("TEST5c"); 
             
-            e_g2g.PrintMatrix();
+            // e_g2g.PrintMatrix();
 
             const double alpha = 10.0;
             // double k = BURGER_MAX_LIN_VEL*( 1 - (exp( -alpha*e_g2g.normf()*e_g2g.normf() ) ) / (e_g2g.normf()) );
@@ -204,7 +217,7 @@ void getPoseCallback(const nav_msgs::Odometry::ConstPtr& msg)
             Matrix<double> u_g2g(2,1);
             u_g2g                       = e_g2g * k;
 
-            u_g2g.PrintMatrix();
+            // u_g2g.PrintMatrix();
 
             // ROS_INFO("TEST7"); 
             Matrix<double> rlt(2,1);

@@ -27,7 +27,7 @@ def DistanceCallback(msg):
         e = 0
         k = (1/front_distance)*(c/(front_distance ** 2 + e))
         u = [ - k * front_distance * cos(direction) , - k * front_distance * sin(direction) ] # k
-        print u
+        # print u
         twist = Twist()
         twist.linear.x = u[0]
         twist.linear.y = 0.0
