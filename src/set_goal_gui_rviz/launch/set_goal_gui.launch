@@ -1,0 +1,10 @@
+<launch>
+  <arg name="model" default="$(env TURTLEBOT3_MODEL)" doc="model type [burger, waffle, waffle_pi]"/>
+  <param name="model" value="$(arg model)"/>
+
+  <param name="robot_description" command="$(find xacro)/xacro '$(find turtlebot3_description)/urdf/turtlebot3_burger.urdf.xacro'"/>
+
+  <node pkg="set_goal_gui_rviz" type="set_goal_gui_server" name="set_goal_gui_server"  output="screen"/>
+  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find set_goal_gui_rviz)/rviz/set_goal_gui_rviz.rviz"/>
+
+</launch>

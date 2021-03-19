@@ -13,3 +13,14 @@ All ROS package
 * random_controllor : 控制機器人隨機走，每五秒轉向
 * motion_stable_control : 計算機器人的速度與角速度（Asymptotic Stability）
 * avoid_obstacle_control : 在安全距離內，Turtlebot3會倒行 
+* set_goal_gui : 用 Tkinter 控制 Turtlebot3 目標
+* set_goal_gui_rviz : 用 RVIZ 控制 Turtlebot3 目標
+
+# Note
+* 啟動順序
+	1. roscore 
+	2. rosrun motion_stable_control Go2GoalServer 
+	3. roslaunch turtlebot3_bringup turtlebot3_remote.launch (很重要！！！不然會讀不到機器人)
+	4. roslaunch set_goal_gui_rviz set_goal_gui.launch
+	5. roslaunch turtlebot3_bringup turtlebot3_robot.launch (在Turtlebot3 上)
+
