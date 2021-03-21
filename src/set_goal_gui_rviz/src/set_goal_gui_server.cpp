@@ -26,7 +26,7 @@ geometry_msgs::Point GoalOfRobot;
 
 // void AddMarker(const tf::Vector3& position,std::string name ,std::string text,InteractiveMarkerControl interactive_mode,std::function<Marker(InteractiveMarker)> makeMarkerCB);
 void AddMarker(const tf::Vector3& position,std::string name ,std::string text,uint8_t interactive_mode,std::function<Marker(InteractiveMarker&)> makeMarkerCB);
-Marker makeBox( InteractiveMarker &msg );
+Marker makeBox( InteractiveMarker &msg ,double ratioX,double ratioY,double ratioZ ,double alpha);
 Marker makeLabel( InteractiveMarker &msg , std::string );
 double EuclideanDistance( geometry_msgs::Point p1 , geometry_msgs::Point p2 );
 // GoalOfRobot
@@ -70,7 +70,7 @@ void frameCallback(const nav_msgs::Odometry::ConstPtr& msg)
   goal_mutex.unlock();
   goal_cv.notify_all();
 
-  AddMarker(position,"turtlebot_marker","",InteractiveMarkerControl::NONE,std::bind(makeLabel,std::placeholders::_1,txt) );
+  AddMarker(position,"turtlebot_marker",txt,InteractiveMarkerControl::NONE,std::bind(makeBox,std::placeholders::_1,0.1,0.1,0.1,0) );
 
   server_mutex.lock();
   server->applyChanges();
@@ -95,18 +95,18 @@ void frameCallback(const nav_msgs::Odometry::ConstPtr& msg)
   // counter++;
 }
 
-Marker makeBox( InteractiveMarker &msg )
+Marker makeBox( InteractiveMarker &msg ,double ratioX,double ratioY,double ratioZ ,double alpha)
 {
   Marker marker;
 
   marker.type = Marker::CUBE;
-  marker.scale.x = msg.scale * 0.3;
-  marker.scale.y = msg.scale * 0.3;
-  marker.scale.z = msg.scale * 0.1;
+  marker.scale.x = msg.scale * ratioX;
+  marker.scale.y = msg.scale * ratioY;
+  marker.scale.z = msg.scale * ratioZ;
   marker.color.r = 1;
   marker.color.g = 1;
   marker.color.b = 1;
-  marker.color.a = 0.5;
+  marker.color.a = alpha;
 
   return marker;
 }
@@ -217,7 +217,7 @@ void processFeedback( const visualization_msgs::InteractiveMarkerFeedbackConstPt
       AddMarker(position,"goal_marker",stg("Goal Marker\n") + 
                                             stg("( ") + std::to_string(feedback->pose.position.x) + stg(" , ") + std::to_string(feedback->pose.position.y) + stg(" )\n"),// +
                                             //stg("Distance : ") + std::to_string(EuclideanDistance(msg->pose.pose.position,feedback->pose.position))
-                                            InteractiveMarkerControl::MOVE_PLANE,makeBox );
+                                            InteractiveMarkerControl::MOVE_PLANE,std::bind(makeBox,std::placeholders::_1,0.3,0.3,0.1,0.5) );
 
       break;
     }
@@ -319,13 +319,14 @@ void AddMarker(const tf::Vector3& position,std::string name ,std::string text,ui
 }
 void makeTurtlebotDescription(const tf::Vector3& position)
 {
-  AddMarker(position,"turtlebot_marker","",InteractiveMarkerControl::NONE,std::bind(makeLabel,std::placeholders::_1,"Turtlebot3"));
+  // AddMarker(position,"turtlebot_marker","",InteractiveMarkerControl::NONE,std::bind(makeLabel,std::placeholders::_1,"Turtlebot3"));
+  AddMarker(position,"turtlebot_marker","",InteractiveMarkerControl::NONE,std::bind(makeBox,std::placeholders::_1,0,0,0,0));
   //server->setCallback("turtlebot_marker", &processFeedback);
 }
 
 void makeGoalMarker( const tf::Vector3& position)
 {
-  AddMarker(position,"goal_marker","Goal Marker\n",InteractiveMarkerControl::MOVE_PLANE,makeBox);
+  AddMarker(position,"goal_marker","Goal Marker\n",InteractiveMarkerControl::MOVE_PLANE,std::bind(makeBox,std::placeholders::_1,0.3,0.3,0.1,0.5));
 
   server_mutex.lock();
   server->setCallback("goal_marker", &processFeedback);
