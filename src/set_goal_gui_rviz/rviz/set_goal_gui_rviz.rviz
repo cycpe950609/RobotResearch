@@ -138,7 +138,7 @@ Visualization Manager:
       Name: Turtlebot3 Font Direction
       Position Tolerance: 0.10000000149011612
       Shape:
-        Alpha: 1
+        Alpha: 0.20000000298023224
         Axes Length: 1
         Axes Radius: 0.10000000149011612
         Color: 255; 25; 0

@@ -16,14 +16,29 @@
 #include <condition_variable>
 
 #include <string>
-void AddGoalMarker(const tf::Vector3& position,std::string name ,std::string text);
-// 
-std::condition_variable g_cv;
-std::mutex g_mutex;
+#include <functional>
+
+using namespace visualization_msgs;
+// ===============
+// Turtlebot3 properties
+geometry_msgs::Point GoalOfRobot;
+// ===============
+
+// void AddMarker(const tf::Vector3& position,std::string name ,std::string text,InteractiveMarkerControl interactive_mode,std::function<Marker(InteractiveMarker)> makeMarkerCB);
+void AddMarker(const tf::Vector3& position,std::string name ,std::string text,uint8_t interactive_mode,std::function<Marker(InteractiveMarker&)> makeMarkerCB);
+Marker makeBox( InteractiveMarker &msg );
+Marker makeLabel( InteractiveMarker &msg , std::string );
+double EuclideanDistance( geometry_msgs::Point p1 , geometry_msgs::Point p2 );
+// GoalOfRobot
+std::condition_variable goal_cv;
+std::mutex goal_mutex;
+
 bool isGo2Goal = false;
 actionlib::SimpleActionClient<motion_stable_control::Go2GoalAction> *ac;
-using namespace visualization_msgs;
 
+// Server
+std::condition_variable server_cv;
+std::mutex server_mutex;
 boost::shared_ptr<interactive_markers::InteractiveMarkerServer> server;
 
 // 声明用于发布的反馈及结果
@@ -37,7 +52,30 @@ interactive_markers::MenuHandler menu_handler;
 void frameCallback(const nav_msgs::Odometry::ConstPtr& msg)
 {
   // ROS_INFO("frameCallback triggered");
+  typedef std::string stg;
+  tf::Vector3 position;
+  auto pos = msg->pose.pose.position;
+ 
+  position = tf::Vector3( pos.x - 0.65, pos.y, pos.z);//TODO
+  // AddMarker(position,"turtlebot_marker",stg("Turtlebot3\n") + 
+  //                                       stg("( ") + std::to_string(msg->pose.pose.position.x) + stg(" , ") + std::to_string(msg->pose.pose.position.y) + stg(" )\n") +
+  //                                       stg("Distance : ") + std::to_string(EuclideanDistance(msg->pose.pose.position,GoalOfRobot )),
+  //                                       InteractiveMarkerControl::NONE,makeLabel );
+  
+  goal_mutex.lock();
+
+  auto txt =  stg("Turtlebot3\n") + 
+              stg("( ") + std::to_string(msg->pose.pose.position.x) + stg(" , ") + std::to_string(msg->pose.pose.position.y) + stg(" )\n") +
+              stg("Distance : ") + std::to_string(EuclideanDistance(msg->pose.pose.position,GoalOfRobot ));
+  goal_mutex.unlock();
+  goal_cv.notify_all();
+
+  AddMarker(position,"turtlebot_marker","",InteractiveMarkerControl::NONE,std::bind(makeLabel,std::placeholders::_1,txt) );
+
+  server_mutex.lock();
   server->applyChanges();
+  server_mutex.unlock();
+  server_cv.notify_all();
   // static uint32_t counter = 0;
 
   // static tf::TransformBroadcaster br;
@@ -73,6 +111,23 @@ Marker makeBox( InteractiveMarker &msg )
   return marker;
 }
 
+Marker makeLabel( InteractiveMarker &msg , std::string text )
+{
+  Marker marker;
+
+  marker.type = Marker::TEXT_VIEW_FACING;
+  marker.scale.x = msg.scale * 0.3;
+  marker.scale.y = msg.scale * 0.3;
+  marker.scale.z = msg.scale * 0.1;
+  marker.color.r = 1;
+  marker.color.g = 1;
+  marker.color.b = 1;
+  marker.color.a = 1;
+  marker.text = text;
+
+  return marker;
+}
+
 
 // 当action完成后会调用次回调函数一次
 void finishCallback(const actionlib::SimpleClientGoalState& state,const motion_stable_control::Go2GoalResultConstPtr& result)
@@ -100,6 +155,13 @@ void updateMarker( const visualization_msgs::InteractiveMarkerFeedbackConstPtr &
   // ROS_INFO("Update Marker called");
 }
 
+double EuclideanDistance( geometry_msgs::Point p1 , geometry_msgs::Point p2 )
+{
+    double dx = p1.x - p2.x;
+    double dy = p1.y - p2.y;
+    double dz = p1.z - p2.z;
+    return sqrt( dx*dx + dy*dy + dz*dz );
+}
 
 
 void processFeedback( const visualization_msgs::InteractiveMarkerFeedbackConstPtr &feedback )
@@ -152,8 +214,10 @@ void processFeedback( const visualization_msgs::InteractiveMarkerFeedbackConstPt
       tf::Vector3 position;
       position = tf::Vector3( feedback->pose.position.x, feedback->pose.position.y, feedback->pose.position.z);
       typedef std::string stg;
-      AddGoalMarker(position,"goal_marker",stg("Goal Marker\n") + 
-                                            stg("( ") + std::to_string(feedback->pose.position.x) + stg(" , ") + std::to_string(feedback->pose.position.y) + stg(" )") );
+      AddMarker(position,"goal_marker",stg("Goal Marker\n") + 
+                                            stg("( ") + std::to_string(feedback->pose.position.x) + stg(" , ") + std::to_string(feedback->pose.position.y) + stg(" )\n"),// +
+                                            //stg("Distance : ") + std::to_string(EuclideanDistance(msg->pose.pose.position,feedback->pose.position))
+                                            InteractiveMarkerControl::MOVE_PLANE,makeBox );
 
       break;
     }
@@ -186,7 +250,14 @@ void processFeedback( const visualization_msgs::InteractiveMarkerFeedbackConstPt
         goal.Goal.y = pose.position.y;
         goal.Goal.z = 0;
           // ac.sendGoal(goal,&finishCallback,&execCallback,&feedbackCallback);
-          
+
+        goal_mutex.lock();
+        GoalOfRobot.x = goal.Goal.x;
+        GoalOfRobot.y = goal.Goal.y;
+        GoalOfRobot.z = goal.Goal.z;
+        goal_mutex.unlock();
+        goal_cv.notify_all();
+              
         ac->sendGoal(goal,
                     boost::bind(&finishCallback, _1, _2),
                     boost::bind(&execCallback),
@@ -198,7 +269,11 @@ void processFeedback( const visualization_msgs::InteractiveMarkerFeedbackConstPt
         // g_mutex.unlock();
         // g_cv.notify_all();
 
+        server_mutex.lock();
         server->setPose( feedback->marker_name, pose );
+        server_mutex.unlock();
+        server_cv.notify_all();
+
         //server->applyChanges();
         moved = false;
       }
@@ -206,10 +281,14 @@ void processFeedback( const visualization_msgs::InteractiveMarkerFeedbackConstPt
     }
   }
 
+  server_mutex.lock();
   server->applyChanges();
+  server_mutex.unlock();
+  server_cv.notify_all();
 }
 
-void AddGoalMarker(const tf::Vector3& position,std::string name ,std::string text)
+// void AddMarker(const tf::Vector3& position,std::string name ,std::string text,InteractiveMarkerControl interactive_mode,std::function<Marker(InteractiveMarker)> makeMarkerCB)
+void AddMarker(const tf::Vector3& position,std::string name ,std::string text,uint8_t interactive_mode,std::function<Marker(InteractiveMarker&)> makeMarkerCB)
 {
   InteractiveMarker int_marker;
   int_marker.header.frame_id = "odom";
@@ -224,22 +303,34 @@ void AddGoalMarker(const tf::Vector3& position,std::string name ,std::string tex
   tf::Quaternion orien(0.0, 1.0, 0.0, 1.0);
   orien.normalize();
   tf::quaternionTFToMsg(orien, control.orientation);
-  control.interaction_mode = InteractiveMarkerControl::MOVE_PLANE;
+  control.interaction_mode = interactive_mode;//InteractiveMarkerControl::MOVE_PLANE;
   int_marker.controls.push_back(control);
 
   // make a box which also moves in the plane
-  control.markers.push_back( makeBox(int_marker) );
+  control.markers.push_back( makeMarkerCB(int_marker) );
   control.always_visible = true;
   int_marker.controls.push_back(control);
 
   // we want to use our special callback function
+  server_mutex.lock();
   server->insert(int_marker);
+  server_mutex.unlock();
+  server_cv.notify_all();
+}
+void makeTurtlebotDescription(const tf::Vector3& position)
+{
+  AddMarker(position,"turtlebot_marker","",InteractiveMarkerControl::NONE,std::bind(makeLabel,std::placeholders::_1,"Turtlebot3"));
+  //server->setCallback("turtlebot_marker", &processFeedback);
 }
 
 void makeGoalMarker( const tf::Vector3& position)
 {
-  AddGoalMarker(position,"goal_marker","Goal Marker\n");
+  AddMarker(position,"goal_marker","Goal Marker\n",InteractiveMarkerControl::MOVE_PLANE,makeBox);
+
+  server_mutex.lock();
   server->setCallback("goal_marker", &processFeedback);
+  server_mutex.unlock();
+  server_cv.notify_all();
 
   // set different callback for POSE_UPDATE feedback
   // server->setCallback(int_marker.name, &updateMarker, visualization_msgs::InteractiveMarkerFeedback::POSE_UPDATE );
@@ -274,9 +365,13 @@ int main(int argc, char** argv)
  
   position = tf::Vector3( 0, 0, 0);
   makeGoalMarker( position );
+  //make roboot's description, eg: position , distance
+  makeTurtlebotDescription( position );
  
-
+  server_mutex.lock();
   server->applyChanges();
+  server_mutex.unlock();
+  server_cv.notify_all();
 
   
 
