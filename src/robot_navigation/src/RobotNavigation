@@ -1,0 +1,291 @@
+#!/usr/bin/env python2
+import rospy
+import motion_stable_control.msg
+from sensor_msgs.msg import LaserScan
+from nav_msgs.msg import Odometry
+from geometry_msgs.msg import Point,Twist
+from tf.transformations import quaternion_from_euler,euler_from_quaternion
+import actionlib
+from math import pi,cos,sin,sqrt,exp
+import threading
+import numpy as np
+
+
+
+class Go2GoalAction(object):
+    # create messages that are used to publish feedback/result
+    g2g_feedback = motion_stable_control.msg.Go2GoalFeedback()
+    g2g_result = motion_stable_control.msg.Go2GoalResult()
+    isGo2Goal = False
+    GoalOfRobot = Point(0,0,0)
+    g2g_cv = threading.Condition()
+    ao_twist_cv = threading.Condition()
+
+
+    def __init__(self, name):
+        self.dis_sub = rospy.Subscriber('scan', LaserScan, self.getDistanceCallback)
+        self.avoid_obstacle_twist = Twist()
+        self.avoid_obstacle_twist.linear.x = 0.0
+        self.avoid_obstacle_twist.linear.y = 0.0
+        self.avoid_obstacle_twist.linear.z = 0.0
+        self.avoid_obstacle_twist.angular.x = 0.0
+        self.avoid_obstacle_twist.angular.y = 0.0
+        self.avoid_obstacle_twist.angular.z = 0.0
+        self.front_distance = float("inf")
+        self.direction = 0.0
+
+        self.go2goal_twist = Twist()
+        self.go2goal_twist.linear.x = 0.0
+        self.go2goal_twist.linear.y = 0.0
+        self.go2goal_twist.linear.z = 0.0
+        self.go2goal_twist.angular.x = 0.0
+        self.go2goal_twist.angular.y = 0.0
+        self.go2goal_twist.angular.z = 0.0
+
+        self.DangerDistance = 0.5
+
+        # self.pub = rospy.Publisher('cmd_vel', Twist, queue_size=10)
+
+        self.odo_sub = rospy.Subscriber('odom',Odometry,self.getPoseCallback)
+        self.new_twist = rospy.Publisher('cmd_vel', Twist, queue_size=10)
+        self._action_name = name
+        self._as = actionlib.SimpleActionServer(self._action_name, motion_stable_control.msg.Go2GoalAction, execute_cb=self.execute_cb, auto_start = False)
+        self._as.start()
+        rospy.loginfo("Robot Navigation Server Start");
+      
+    def execute_cb(self, goal):
+        self.isGo2Goal = True
+        self.GoalOfRobot.x = goal.Goal.x
+        self.GoalOfRobot.y = goal.Goal.y
+        self.GoalOfRobot.z = goal.Goal.z
+
+        rospy.loginfo("Get goal ( %lf , %lf , %lf )"%(goal.Goal.x , goal.Goal.y , goal.Goal.z))
+
+        while(self.isGo2Goal == True):
+            try:
+                self.g2g_cv.acquire()
+                self.g2g_cv.wait()
+            finally:
+                self.g2g_cv.release()
+
+        rospy.loginfo("Go to Goal Finished")
+
+    def EuclideanDistance( self, p1 ,p2):
+        dx = p1.x - p2.x
+        dy = p1.y - p2.y
+        dz = p1.z - p2.z
+        return sqrt( dx*dx + dy*dy + dz*dz )
+    def getDistanceCallback(self,msg): # Callback of Lidar
+        # print ( "First Value %f , Last Value %f" )%( msg.ranges[0], msg.ranges[359] )
+        self.ao_twist_cv.acquire()
+
+        self.front_distance = msg.ranges[0]
+        if(self.front_distance > msg.range_min and self.front_distance < self.DangerDistance):
+            # Avoid Obstacle
+            c = 1
+            e = 0
+            k = (1/self.front_distance)*(c/(self.front_distance ** 2 + e))
+            u = [ - k * self.front_distance * cos(self.direction) , - k * self.front_distance * sin(self.direction) ] # k
+            # print u
+            self.avoid_obstacle_twist.linear.x = u[0]
+            self.avoid_obstacle_twist.linear.y = 0.0
+            self.avoid_obstacle_twist.linear.z = 0.0
+
+            self.avoid_obstacle_twist.angular.x = 0.0
+            self.avoid_obstacle_twist.angular.y = 0.0
+            self.avoid_obstacle_twist.angular.z = u[1]
+        else:
+            self.front_distance = float("inf")
+            self.avoid_obstacle_twist.linear.x = 0.0
+            self.avoid_obstacle_twist.linear.y = 0.0
+            self.avoid_obstacle_twist.linear.z = 0.0
+            self.avoid_obstacle_twist.angular.x = 0.0
+            self.avoid_obstacle_twist.angular.y = 0.0
+            self.avoid_obstacle_twist.angular.z = 0.0
+        self.ao_twist_cv.notify()
+        self.ao_twist_cv.release()
+
+    def getGo2GoalTwist(self,msg):
+
+
+        if(self.isGo2Goal):
+            self.g2g_feedback.Position = msg.pose.pose.position
+            self._as.publish_feedback(self.g2g_feedback)
+
+        # // ROS_INFO("Position %lf %lf",msg->pose.pose.position.x,msg->pose.pose.position.y);
+        # // ROS_INFO("DistanceError %lf " , EuclideanDistance(GoalOfRobot , msg->pose.pose.position) );
+
+            if(self.EuclideanDistance(self.GoalOfRobot , msg.pose.pose.position) <= DistanceError): # // Arrive goal
+                rospy.loginfo("Go2Goal Success")
+                self.go2goal_twist.linear.x = 0.0
+                self.go2goal_twist.linear.y = 0.0
+                self.go2goal_twist.linear.z = 0.0
+
+                self.go2goal_twist.angular.x = 0.0
+                self.go2goal_twist.angular.y = 0.0
+                self.go2goal_twist.angular.z = 0.0
+                self._as.set_succeeded(self.g2g_result)
+
+                self.g2g_cv.acquire()
+                self.isGo2Goal = False
+                self.g2g_cv.notify()
+                self.g2g_cv.release()
+
+            else:
+                if (self._as.is_preempt_requested() ):
+                    # // Notify action cancellation
+                    rospy.loginfo("py_go_to_goal_control : Preempted")
+                    # // Action cancellation and consider action as failure and save to variable
+                    self._as.set_preempted()
+                    self.g2g_cv.acquire()
+                    self.isGo2Goal = False
+                    self.g2g_cv.notify()
+                    self.g2g_cv.release()
+                    return
+
+                # rospy.loginfo((" New Position : %lf , %lf")%( msg.pose.pose.position.x , msg.pose.pose.position.y))
+                robot_post                      = np.array([
+                    [msg.pose.pose.position.x],
+                    [msg.pose.pose.position.y]
+                ])
+
+                robot_dest                      = np.array([
+                    [self.GoalOfRobot.x],
+                    [self.GoalOfRobot.y]
+                ])
+
+                # // ROS_INFO("TEST3")
+
+                epsilon = 0.1
+                
+                va               = np.array([
+                    [1,0],
+                    [0,1/epsilon]
+                ])
+
+                # //Get Euler Angle from Quaternion
+                (r, p, yaw) = euler_from_quaternion([msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w])
+                self.direction = yaw
+                # rospy.loginfo("EulerYaw %lf "%yaw)
+
+                # // tf2::Quaternion quat_tf;
+                # // tf2::fromMsg(msg->pose.pose.orientation, quat_tf);
+                
+                # // tf2Scalar angle = quat_tf.getAngle();
+
+                # // Matrix<double> theta            = { { cos(msg->pose.pose.orientation.z) , sin(msg->pose.pose.orientation.z) },
+                # //                                     { -sin(msg->pose.pose.orientation.z) , cos(msg->pose.pose.orientation.z) }
+                # // };
+                # // Matrix<double> theta            = { { cos(-yaw) , sin(-yaw) },
+                # //                                     { -sin(-yaw) , cos(-yaw) }
+                # // };
+                theta            = np.array([
+                    [cos(yaw) , sin(yaw)],
+                    [-sin(yaw) , cos(yaw)]
+                ])
+                
+                e_g2g                       = robot_dest - robot_post
+                # // e_g2g                       = robot_post - robot_dest;
+                # // ROS_INFO("TEST5b"); 
+                # print e_g2g
+                e_g2g                       = e_g2g + 0.001
+                # print e_g2g
+                # print '===================='
+                # // ROS_INFO("TEST5c"); 
+                
+                # // e_g2g.PrintMatrix();
+
+                alpha = 10.0
+                # // double k = BURGER_MAX_LIN_VEL*( 1 - (exp( -alpha*e_g2g.normf()*e_g2g.normf() ) ) / (e_g2g.normf()) );
+                e_g2g_normf = np.linalg.norm(e_g2g)
+                # print "e_g2g_normf : %lf"%e_g2g_normf
+                k = BURGER_MAX_LIN_VEL*( (1 - exp( -alpha*e_g2g_normf*e_g2g_normf ))  / ( e_g2g_normf ) )
+
+                # // ROS_INFO("TEST6"); 
+                # print "K : %lf"%k
+                # print "Yaw : %lf"%yaw
+                u_g2g                       = e_g2g * k
+                # print theta
+                # print "VA:"
+                # print va
+                # print "theta:"
+                # print theta
+                # print "u_g2g:"
+                # print u_g2g
+                # print '===================='
+
+                # // u_g2g.PrintMatrix();
+                rlt                         = va.dot(theta).dot(u_g2g); 
+                # print rlt
+                # print '===================='
+
+                # rospy.loginfo("rlt value")
+                # print rlt
+                self.go2goal_twist.linear.x = rlt[0][0]
+                self.go2goal_twist.linear.y = 0.0
+                self.go2goal_twist.linear.z = 0.0
+
+                self.go2goal_twist.angular.x = 0.0
+                self.go2goal_twist.angular.y = 0.0
+                self.go2goal_twist.angular.z = rlt[1][0]
+                # print "Test Go2Goal Twist"
+                # print self.go2goal_twist
+            # self.new_twist.publish(twist);
+                #// ROS_INFO("Update Twist");
+    def getPoseCallback(self,msg):
+        self.getGo2GoalTwist(msg)
+
+        beta = 1.0
+        delta = 1 - exp( -beta * self.front_distance)
+        print "front_distance"
+        print self.front_distance
+        print "delta"
+        print delta
+        twist = Twist()
+        aot = self.avoid_obstacle_twist
+        ggt = self.go2goal_twist
+        
+        self.ao_twist_cv.acquire()
+
+        twist.linear.x = delta*ggt.linear.x + (1 - delta)*aot.linear.x
+        twist.linear.y = 0.0
+        twist.linear.z = 0.0
+
+        twist.angular.x = 0.0
+        twist.angular.y = 0.0
+        twist.angular.z = delta*ggt.angular.z + (1 - delta)*aot.angular.z
+
+        self.ao_twist_cv.notify()
+        self.ao_twist_cv.release()
+
+        # print "Go2Goal Twist"
+        # print self.go2goal_twist
+        # print "Avoid Obstacle Twist"
+        # print self.avoid_obstacle_twist
+        print "Twist"
+        print twist
+        self.new_twist.publish(twist)
+        
+
+
+#Some Constant
+BURGER_MAX_LIN_VEL  = 0.22
+BURGER_MAX_ANG_VEL  = 2.84
+DistanceError       = 0.1
+
+
+
+if __name__ == '__main__':
+    rospy.init_node('robot_navigation')
+    server = Go2GoalAction('Go2GoalAction')
+    # print "Test"
+    rospy.spin()
+    # try:
+    #     rospy.init_node('robot_navigation')
+    #     server = Go2GoalAction('Go2GoalAction')
+    #     print "Test"
+    #     rospy.spin()
+    # except:
+    #     print "Error"
+
+    #     rospy.signal_shutdown("Error occurred")

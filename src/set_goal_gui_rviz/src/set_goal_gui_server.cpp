@@ -70,7 +70,7 @@ void frameCallback(const nav_msgs::Odometry::ConstPtr& msg)
   goal_mutex.unlock();
   goal_cv.notify_all();
 
-  AddMarker(position,"turtlebot_marker",txt,InteractiveMarkerControl::NONE,std::bind(makeBox,std::placeholders::_1,0.1,0.1,0.1,0) );
+  AddMarker(position,"turtlebot_marker",txt,InteractiveMarkerControl::NONE,std::bind(makeBox,std::placeholders::_1,0.1,0.1,0.1,0.01) );
 
   server_mutex.lock();
   server->applyChanges();
@@ -320,7 +320,7 @@ void AddMarker(const tf::Vector3& position,std::string name ,std::string text,ui
 void makeTurtlebotDescription(const tf::Vector3& position)
 {
   // AddMarker(position,"turtlebot_marker","",InteractiveMarkerControl::NONE,std::bind(makeLabel,std::placeholders::_1,"Turtlebot3"));
-  AddMarker(position,"turtlebot_marker","",InteractiveMarkerControl::NONE,std::bind(makeBox,std::placeholders::_1,0,0,0,0));
+  AddMarker(position,"turtlebot_marker","",InteractiveMarkerControl::NONE,std::bind(makeBox,std::placeholders::_1,0,0,0,0.1));
   //server->setCallback("turtlebot_marker", &processFeedback);
 }
 
