@@ -33,3 +33,6 @@ See [setup.md](setup.md)
 		2. configuration_basename:=turtlebot3_lds_2d_gazebo.lua : 如果使用gazebo模擬，則須使用專屬的設定（見turtlebot3/turtlebot3_slam/config/turtlebot3_lds_2d_gazebo.lua），否則會有「The IMU frame must be colocated with the tracking frame. Transforming linear acceleration into the tracking frame will otherwise be imprecise.」錯誤
 		3. open_rviz:=false : 我們有set_goal_gui_rviz顯示地圖，故cartographer不須打開rviz
 
+
+# TODO:
+* Use map_server's map_saver and map2gazebo to generate a map (stl)

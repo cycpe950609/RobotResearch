@@ -5,6 +5,10 @@
 # Setup remote PC
 
 // TODO
+* 安裝 Fysom : robot_navigation 執行需要
+* 安裝map2gazebo所需套件
+	pip install --user trimesh
+	pip install --user numpy
 
 # Setup Cartographer
 * Method is same on [Turtlebot3 emanual](https://emanual.robotis.com/docs/en/platform/turtlebot3/slam/#run-slam-node)

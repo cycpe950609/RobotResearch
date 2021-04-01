@@ -3,12 +3,13 @@ import rospy
 import motion_stable_control.msg
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import Point,Twist
+from geometry_msgs.msg import Point,Twist, PoseStamped ,Quaternion
 from tf.transformations import quaternion_from_euler,euler_from_quaternion
 import actionlib
-from math import pi,cos,sin,sqrt,exp
+from math import pi,cos,sin,sqrt,exp,atan
 import threading
 import numpy as np
+from fysom import Fysom
 
 
 
@@ -31,7 +32,8 @@ class Go2GoalAction(object):
         self.avoid_obstacle_twist.angular.x = 0.0
         self.avoid_obstacle_twist.angular.y = 0.0
         self.avoid_obstacle_twist.angular.z = 0.0
-        self.front_distance = float("inf")
+        self.obstacle_distance = float("inf")
+        self.obstacle_degree = 0.0
         self.direction = 0.0
 
         self.go2goal_twist = Twist()
@@ -48,10 +50,30 @@ class Go2GoalAction(object):
 
         self.odo_sub = rospy.Subscriber('odom',Odometry,self.getPoseCallback)
         self.new_twist = rospy.Publisher('cmd_vel', Twist, queue_size=10)
+        self.ao_direction = rospy.Publisher('avoid_obstacle_direction', PoseStamped, queue_size=10)
+        self.fw_direction = rospy.Publisher('follow_wall_direction', PoseStamped, queue_size=10)
+        # self.fw_cc_direction = rospy.Publisher('follow_wall_counter_clockwise_direction', PoseStamped, queue_size=10)
+        self.ao_direction = rospy.Publisher('avoid_obstacle_direction', PoseStamped, queue_size=10)
         self._action_name = name
         self._as = actionlib.SimpleActionServer(self._action_name, motion_stable_control.msg.Go2GoalAction, execute_cb=self.execute_cb, auto_start = False)
         self._as.start()
         rospy.loginfo("Robot Navigation Server Start");
+
+        # Init FSM
+        self.fsm = Fysom({
+                'initial': 'Go2GoalState',
+                'events': [
+                    {'name': 'TurnClockwise'            , 'src' : 'Go2GoalState'                    , 'dst': 'FollowWallClockwiseState'},
+                    {'name': 'TurnCounterClockwise'     , 'src' : 'Go2GoalState'                    , 'dst': 'FollowWallCounterClockwiseState'},
+                    {'name': 'InSafeDistance'           , 'src' : 'FollowWallClockwiseState'        , 'dst': 'Go2GoalState'},
+                    {'name': 'InDangerDistance'         , 'src' : 'FollowWallClockwiseState'        , 'dst': 'AvoidObstacleState'},
+                    {'name': 'TurnClockwise'            , 'src' : 'AvoidObstacleState'              , 'dst': 'FollowWallClockwiseState'},
+                    {'name': 'TurnCounterClockwise'     , 'src' : 'AvoidObstacleState'              , 'dst': 'FollowWallCounterClockwiseState'},
+                    {'name': 'InSafeDistance'           , 'src' : 'FollowWallCounterClockwiseState' , 'dst': 'Go2GoalState'},
+                    {'name': 'InDangerDistance'         , 'src' : 'FollowWallCounterClockwiseState' , 'dst': 'AvoidObstacleState'},
+
+                ]})
+
       
     def execute_cb(self, goal):
         self.isGo2Goal = True
@@ -79,13 +101,27 @@ class Go2GoalAction(object):
         # print ( "First Value %f , Last Value %f" )%( msg.ranges[0], msg.ranges[359] )
         self.ao_twist_cv.acquire()
 
-        self.front_distance = msg.ranges[0]
-        if(self.front_distance > msg.range_min and self.front_distance < self.DangerDistance):
+        self.obstacle_distance = min( msg.ranges )
+        # obstacle_degree = self.direction + ( msg.angle_min + msg.ranges.index( self.obstacle_distance )*msg.angle_increment )
+        self.obstacle_degree = ( self.direction + msg.angle_min + msg.ranges.index( self.obstacle_distance )*msg.angle_increment )
+        # print "direction : %lf , obstacle_degree : %lf"%(self.direction,obstacle_degree)
+        # print "Direction : %lf"%(self.direction)
+        # print "AngleMin : %lf"%( msg.angle_min )
+        # print "Increment : %lf"%msg.angle_increment
+        # print "Degree : %lf"%( msg.angle_min + msg.ranges.index( self.obstacle_distance )*msg.angle_increment )
+        # print "Obstacle Direction : %lf"%( self.obstacle_degree )
+        # print "Avoid Obstacle Direction : %lf"%( self.obstacle_degree + pi )
+
+        if(self.obstacle_distance > msg.range_min and self.obstacle_distance < self.DangerDistance):
             # Avoid Obstacle
             c = 1
             e = 0
-            k = (1/self.front_distance)*(c/(self.front_distance ** 2 + e))
-            u = [ - k * self.front_distance * cos(self.direction) , - k * self.front_distance * sin(self.direction) ] # k
+            k = (1/self.obstacle_distance)*(c/(self.obstacle_distance ** 2 + e))
+            # u = [ - k * self.obstacle_distance * cos(self.direction) , - k * self.obstacle_distance * sin(self.direction) ] # k
+            # u = [ - k * self.obstacle_distance * cos(obstacle_degree) , - k * self.obstacle_distance * sin(obstacle_degree) ] # k
+            # u = [ - k * self.obstacle_distance * cos(obstacle_degree) , - k * self.obstacle_distance * sin(obstacle_degree) ] # k
+            u = [ k * self.obstacle_distance * cos(self.obstacle_degree) , k * self.obstacle_distance * sin(self.obstacle_degree) ] # k
+
             # print u
             self.avoid_obstacle_twist.linear.x = u[0]
             self.avoid_obstacle_twist.linear.y = 0.0
@@ -94,19 +130,29 @@ class Go2GoalAction(object):
             self.avoid_obstacle_twist.angular.x = 0.0
             self.avoid_obstacle_twist.angular.y = 0.0
             self.avoid_obstacle_twist.angular.z = u[1]
+
+            # print "Value of K : %lf , Value of FrontDistance : %lf"%( k , self.obstacle_distance )
+            # print "AO_TWIST %lf , %lf"%(self.avoid_obstacle_twist.linear.x,self.avoid_obstacle_twist.angular.z)
+
         else:
-            self.front_distance = float("inf")
+            self.obstacle_distance = float("inf")
             self.avoid_obstacle_twist.linear.x = 0.0
             self.avoid_obstacle_twist.linear.y = 0.0
             self.avoid_obstacle_twist.linear.z = 0.0
             self.avoid_obstacle_twist.angular.x = 0.0
             self.avoid_obstacle_twist.angular.y = 0.0
             self.avoid_obstacle_twist.angular.z = 0.0
+
+
         self.ao_twist_cv.notify()
         self.ao_twist_cv.release()
 
     def getGo2GoalTwist(self,msg):
 
+
+        # //Get Euler Angle from Quaternion
+        (r, p, yaw) = euler_from_quaternion([msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w])
+        self.direction = yaw
 
         if(self.isGo2Goal):
             self.g2g_feedback.Position = msg.pose.pose.position
@@ -163,9 +209,7 @@ class Go2GoalAction(object):
                     [0,1/epsilon]
                 ])
 
-                # //Get Euler Angle from Quaternion
-                (r, p, yaw) = euler_from_quaternion([msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w])
-                self.direction = yaw
+                
                 # rospy.loginfo("EulerYaw %lf "%yaw)
 
                 # // tf2::Quaternion quat_tf;
@@ -235,38 +279,143 @@ class Go2GoalAction(object):
     def getPoseCallback(self,msg):
         self.getGo2GoalTwist(msg)
 
-        beta = 1.0
-        delta = 1 - exp( -beta * self.front_distance)
-        print "front_distance"
-        print self.front_distance
-        print "delta"
-        print delta
-        twist = Twist()
+        # Avoid Obstacle Direction
+        ps = PoseStamped()
+        ps.header.frame_id = 'odom'
+        ps.header.stamp = rospy.Time.now()
+        ps.pose.position = msg.pose.pose.position
+        (x,y,z,w) = quaternion_from_euler(0, 0, self.obstacle_degree + pi)
+        ps.pose.orientation = Quaternion(x,y,z,w)
+        self.ao_direction.publish(ps)
+
+        # Follow Wall Direction
+        fw = PoseStamped()
+        fw.header.frame_id = 'odom'
+        fw.header.stamp = rospy.Time.now()
+        fw.pose.position = msg.pose.pose.position
+        
+        self.fw_direction.publish(fw)
+        
+
+
+
+        # beta = 1.0
+        # delta = 1 - exp( -beta * self.obstacle_distance)
+        # # print "obstacle_distance"
+        # # print self.obstacle_distance
+        # # print "delta"
+        # # print delta
+        # twist = Twist()
+        # aot = self.avoid_obstacle_twist
+        # ggt = self.go2goal_twist
+        
+        # self.ao_twist_cv.acquire()
+
+        # twist.linear.x = delta*ggt.linear.x + (1 - delta)*aot.linear.x
+        # twist.linear.y = 0.0
+        # twist.linear.z = 0.0
+
+        # twist.angular.x = 0.0
+        # twist.angular.y = 0.0
+        # twist.angular.z = delta*ggt.angular.z + (1 - delta)*aot.angular.z
+
+        # self.ao_twist_cv.notify()
+        # self.ao_twist_cv.release()
+
+        # # print "Go2Goal Twist"
+        # # print self.go2goal_twist
+        # # print "Avoid Obstacle Twist"
+        # # print self.avoid_obstacle_twist
+        # # print "Twist"
+        # # print twist
+
+        # Avoid Obstacle
+        u_ao = np.array([ [ self.avoid_obstacle_twist.linear.x ] 
+                        , [ self.avoid_obstacle_twist.angular.z ] ])
+        # Go2Goal
+        u_g2g = np.array([ [ self.go2goal_twist.linear.x ] 
+                        , [ self.go2goal_twist.angular.z ] ])
+        # Follow Wall
+        alpha = 1
+        # Clockwise
+        u_fw_c = alpha * np.array([ [0,1],[-1,0] ]).dot(u_ao)
+        # CounterClockwise
+        u_fw_cc = alpha * np.array([ [0,-1],[1,0] ]).dot(u_ao)
+
+        # inner product of Follow Wall and Go2Goal
+        #inner product of Clockwise
+        ip_c = u_g2g[0][0]* u_fw_c[0][0] + u_g2g[1][0]* u_fw_c[1][0] # np.transpose(u_g2g).dot(u_fw_c)
+        ip_cc = u_g2g[0][0]* u_fw_cc[0][0] + u_g2g[1][0]* u_fw_cc[1][0] # np.transpose(u_g2g).dot(u_fw_cc)
+   
         aot = self.avoid_obstacle_twist
         ggt = self.go2goal_twist
-        
-        self.ao_twist_cv.acquire()
-
-        twist.linear.x = delta*ggt.linear.x + (1 - delta)*aot.linear.x
+        twist = Twist()
+        twist.linear.x = 0.0
         twist.linear.y = 0.0
         twist.linear.z = 0.0
-
         twist.angular.x = 0.0
         twist.angular.y = 0.0
-        twist.angular.z = delta*ggt.angular.z + (1 - delta)*aot.angular.z
+        twist.angular.z = 0.0
+        if( self.fsm.isstate( 'Go2GoalState' ) ):
+            # print "Current State : Go2GolemState"
+            twist = self.go2goal_twist
+            # twist.linear.x  = ggt.linear.x
+            # twist.angular.z = ggt.angular.z
+        elif( self.fsm.isstate( 'FollowWallClockwiseState' ) ):
+            # print "Current State : FollowWallClockwiseState"
+            twist.linear.x  = u_fw_c[0][0]
+            twist.angular.z = u_fw_c[1][0]
+            print "u_fw_c : "
+            print u_fw_c
+            print "tan of direction : %lf"%(u_fw_c[1][0] / u_fw_c[0][0])
+            (x,y,z,w) = quaternion_from_euler(0, 0, atan(u_fw_c[1][0] / u_fw_c[0][0]) )
+            fw.pose.orientation = Quaternion(x,y,z,w)
 
-        self.ao_twist_cv.notify()
-        self.ao_twist_cv.release()
+        elif( self.fsm.isstate( 'AvoidObstacleState' ) ):
+            # print "Current State : AvoidObstacleState"
+            twist.linear.x  = aot.linear.x
+            twist.angular.z = aot.angular.z
+        elif( self.fsm.isstate( 'FollowWallCounterClockwiseState' ) ):
+            # print "Current State : FollowWallCounterClockwiseState"
+            twist.linear.x  = u_fw_cc[0][0]
+            twist.angular.z = u_fw_cc[1][0]
+            print "u_fw_cc : "
+            print u_fw_cc
+            print "tan of direction : %lf"%(u_fw_cc[1][0] / u_fw_cc[0][0])
+            (x,y,z,w) = quaternion_from_euler(0, 0, atan(u_fw_cc[1][0] / u_fw_cc[0][0]) )
+            fw.pose.orientation = Quaternion(x,y,z,w)
+        # Follow Wall Direction
+        self.fw_direction.publish(fw)
 
-        # print "Go2Goal Twist"
-        # print self.go2goal_twist
-        # print "Avoid Obstacle Twist"
-        # print self.avoid_obstacle_twist
-        print "Twist"
-        print twist
-        self.new_twist.publish(twist)
-        
+        # print "TWIST %lf , %lf"%(twist.linear.x,twist.angular.z)
+        # print "ip_c %lf , ip_cc %lf"%(ip_c,ip_cc)
 
+        # TODO : Remove comment to control robot automactivily
+        # self.new_twist.publish(twist)
+
+        # Next State        
+        if( self.fsm.isstate( 'Go2GoalState' ) ):
+            if(ip_c > 0):
+                self.fsm.TurnClockwise()
+            elif(ip_cc > 0):
+                self.fsm.TurnCounterClockwise()
+        elif( self.fsm.isstate( 'FollowWallClockwiseState' ) ):
+            if(self.obstacle_distance > self.DangerDistance):
+                self.fsm.InSafeDistance()
+            elif(self.obstacle_distance < self.DangerDistance - 0.1):
+                self.fsm.InDangerDistance()
+        elif( self.fsm.isstate( 'AvoidObstacleState' ) ):
+            if(ip_c > 0):
+                self.fsm.TurnClockwise()
+            elif(ip_cc > 0):
+                self.fsm.TurnCounterClockwise()
+
+                # TODO: Whicj=h state should we go if we dont need to follow wall ?
+        elif( self.fsm.isstate( 'FollowWallCounterClockwiseState' ) ):
+            if(self.obstacle_distance > self.DangerDistance):
+                self.fsm.InSafeDistance()
+            elif(self.obstacle_distance < self.DangerDistance - 0.1):
+                self.fsm.InDangerDistance()
 
 #Some Constant
 BURGER_MAX_LIN_VEL  = 0.22
