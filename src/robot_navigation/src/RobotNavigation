@@ -36,13 +36,13 @@ class Go2GoalAction(object):
         self.obstacle_degree = 0.0
         self.direction = 0.0
 
-        self.go2goal_twist = Twist()
-        self.go2goal_twist.linear.x = 0.0
-        self.go2goal_twist.linear.y = 0.0
-        self.go2goal_twist.linear.z = 0.0
-        self.go2goal_twist.angular.x = 0.0
-        self.go2goal_twist.angular.y = 0.0
-        self.go2goal_twist.angular.z = 0.0
+        # self.go2goal_twist = Twist()
+        # self.go2goal_twist.linear.x = 0.0
+        # self.go2goal_twist.linear.y = 0.0
+        # self.go2goal_twist.linear.z = 0.0
+        # self.go2goal_twist.angular.x = 0.0
+        # self.go2goal_twist.angular.y = 0.0
+        # self.go2goal_twist.angular.z = 0.0
 
         self.DangerDistance = 0.5
 
@@ -149,10 +149,105 @@ class Go2GoalAction(object):
 
     def getGo2GoalTwist(self,msg):
 
+        # rospy.loginfo((" New Position : %lf , %lf")%( msg.pose.pose.position.x , msg.pose.pose.position.y))
+        robot_post                      = np.array([
+            [msg.pose.pose.position.x],
+            [msg.pose.pose.position.y]
+        ])
 
-        # //Get Euler Angle from Quaternion
+        robot_dest                      = np.array([
+            [self.GoalOfRobot.x],
+            [self.GoalOfRobot.y]
+        ])
+
+        # // ROS_INFO("TEST3")
+
+        epsilon = 0.1
+        
+        va               = np.array([
+            [1,0],
+            [0,1/epsilon]
+        ])
+
+        
+        # rospy.loginfo("EulerYaw %lf "%yaw)
+
+        # // tf2::Quaternion quat_tf;
+        # // tf2::fromMsg(msg->pose.pose.orientation, quat_tf);
+        
+        # // tf2Scalar angle = quat_tf.getAngle();
+
+        # // Matrix<double> theta            = { { cos(msg->pose.pose.orientation.z) , sin(msg->pose.pose.orientation.z) },
+        # //                                     { -sin(msg->pose.pose.orientation.z) , cos(msg->pose.pose.orientation.z) }
+        # // };
+        # // Matrix<double> theta            = { { cos(-yaw) , sin(-yaw) },
+        # //                                     { -sin(-yaw) , cos(-yaw) }
+        # // };
+        yaw = self.direction
+        theta            = np.array([
+            [cos(yaw) , sin(yaw)],
+            [-sin(yaw) , cos(yaw)]
+        ])
+        
+        e_g2g                       = robot_dest - robot_post
+        # // e_g2g                       = robot_post - robot_dest;
+        # // ROS_INFO("TEST5b"); 
+        # print e_g2g
+        e_g2g                       = e_g2g + 0.001
+        # print e_g2g
+        # print '===================='
+        # // ROS_INFO("TEST5c"); 
+        
+        # // e_g2g.PrintMatrix();
+
+        alpha = 10.0
+        # // double k = BURGER_MAX_LIN_VEL*( 1 - (exp( -alpha*e_g2g.normf()*e_g2g.normf() ) ) / (e_g2g.normf()) );
+        e_g2g_normf = np.linalg.norm(e_g2g)
+        # print "e_g2g_normf : %lf"%e_g2g_normf
+        k = BURGER_MAX_LIN_VEL*( (1 - exp( -alpha*e_g2g_normf*e_g2g_normf ))  / ( e_g2g_normf ) )
+
+        # // ROS_INFO("TEST6"); 
+        # print "K : %lf"%k
+        # print "Yaw : %lf"%yaw
+        u_g2g                       = e_g2g * k
+        # print theta
+        # print "VA:"
+        # print va
+        # print "theta:"
+        # print theta
+        # print "u_g2g:"
+        # print u_g2g
+        # print '===================='
+
+        # // u_g2g.PrintMatrix();
+        rlt                         = va.dot(theta).dot(u_g2g); 
+        # print rlt
+        # print '===================='
+
+        # rospy.loginfo("rlt value")
+        # print rlt
+        go2goal_twist = Twist()
+        go2goal_twist.linear.x = rlt[0][0]
+        go2goal_twist.linear.y = 0.0
+        go2goal_twist.linear.z = 0.0
+
+        go2goal_twist.angular.x = 0.0
+        go2goal_twist.angular.y = 0.0
+        go2goal_twist.angular.z = rlt[1][0]
+
+        return go2goal_twist
+        # print "Test Go2Goal Twist"
+        # print self.go2goal_twist
+        # self.new_twist.publish(twist);
+        #// ROS_INFO("Update Twist");
+    def getPoseCallback(self,msg):
+
+        # Get Euler Angle from Quaternion
         (r, p, yaw) = euler_from_quaternion([msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w])
         self.direction = yaw
+
+        
+       
 
         if(self.isGo2Goal):
             self.g2g_feedback.Position = msg.pose.pose.position
@@ -163,13 +258,14 @@ class Go2GoalAction(object):
 
             if(self.EuclideanDistance(self.GoalOfRobot , msg.pose.pose.position) <= DistanceError): # // Arrive goal
                 rospy.loginfo("Go2Goal Success")
-                self.go2goal_twist.linear.x = 0.0
-                self.go2goal_twist.linear.y = 0.0
-                self.go2goal_twist.linear.z = 0.0
+                go2goal_twist = Twist()
+                go2goal_twist.linear.x = 0.0
+                go2goal_twist.linear.y = 0.0
+                go2goal_twist.linear.z = 0.0
 
-                self.go2goal_twist.angular.x = 0.0
-                self.go2goal_twist.angular.y = 0.0
-                self.go2goal_twist.angular.z = 0.0
+                go2goal_twist.angular.x = 0.0
+                go2goal_twist.angular.y = 0.0
+                go2goal_twist.angular.z = 0.0
                 self._as.set_succeeded(self.g2g_result)
 
                 self.g2g_cv.acquire()
@@ -177,245 +273,138 @@ class Go2GoalAction(object):
                 self.g2g_cv.notify()
                 self.g2g_cv.release()
 
-            else:
-                if (self._as.is_preempt_requested() ):
-                    # // Notify action cancellation
-                    rospy.loginfo("py_go_to_goal_control : Preempted")
-                    # // Action cancellation and consider action as failure and save to variable
-                    self._as.set_preempted()
-                    self.g2g_cv.acquire()
-                    self.isGo2Goal = False
-                    self.g2g_cv.notify()
-                    self.g2g_cv.release()
-                    return
+                self.new_twist.publish(go2goal_twist)
 
-                # rospy.loginfo((" New Position : %lf , %lf")%( msg.pose.pose.position.x , msg.pose.pose.position.y))
-                robot_post                      = np.array([
-                    [msg.pose.pose.position.x],
-                    [msg.pose.pose.position.y]
-                ])
 
-                robot_dest                      = np.array([
-                    [self.GoalOfRobot.x],
-                    [self.GoalOfRobot.y]
-                ])
+            elif (self._as.is_preempt_requested() ):
+                # // Notify action cancellation
+                rospy.loginfo("py_go_to_goal_control : Preempted")
+                # // Action cancellation and consider action as failure and save to variable
+                self._as.set_preempted()
+                self.g2g_cv.acquire()
+                self.isGo2Goal = False
+                self.g2g_cv.notify()
+                self.g2g_cv.release()
+                go2goal_twist = Twist()
+                go2goal_twist.linear.x = 0.0
+                go2goal_twist.linear.y = 0.0
+                go2goal_twist.linear.z = 0.0
 
-                # // ROS_INFO("TEST3")
+                go2goal_twist.angular.x = 0.0
+                go2goal_twist.angular.y = 0.0
+                go2goal_twist.angular.z = 0.0
+                self.new_twist.publish(go2goal_twist)
 
-                epsilon = 0.1
+            else :
+                # Avoid Obstacle Direction
+                ps = PoseStamped()
+                ps.header.frame_id = 'odom'
+                ps.header.stamp = rospy.Time.now()
+                ps.pose.position = msg.pose.pose.position
+                (x,y,z,w) = quaternion_from_euler(0, 0, self.obstacle_degree + pi)
+                ps.pose.orientation = Quaternion(x,y,z,w)
+                self.ao_direction.publish(ps)
+
+                # Follow Wall Direction
+                fw = PoseStamped()
+                fw.header.frame_id = 'odom'
+                fw.header.stamp = rospy.Time.now()
+                fw.pose.position = msg.pose.pose.position
+
+                go2goal_twist = self.getGo2GoalTwist(msg)
                 
-                va               = np.array([
-                    [1,0],
-                    [0,1/epsilon]
-                ])
+                # self.fw_direction.publish(fw)
 
+                # Avoid Obstacle
+                u_ao = np.array([ [ self.avoid_obstacle_twist.linear.x ] 
+                                , [ self.avoid_obstacle_twist.angular.z ] ])
+                # Go2Goal
+                u_g2g = np.array([ [ go2goal_twist.linear.x ] 
+                                , [ go2goal_twist.angular.z ] ])
+                # Follow Wall
+                alpha = 1
+                # Clockwise
+                u_fw_c = alpha * np.array([ [0,1],[-1,0] ]).dot(u_ao)
+                # CounterClockwise
+                u_fw_cc = alpha * np.array([ [0,-1],[1,0] ]).dot(u_ao)
+
+                # inner product of Follow Wall and Go2Goal
+                #inner product of Clockwise
+                ip_c = u_g2g[0][0]* u_fw_c[0][0] + u_g2g[1][0]* u_fw_c[1][0] # np.transpose(u_g2g).dot(u_fw_c)
+                ip_cc = u_g2g[0][0]* u_fw_cc[0][0] + u_g2g[1][0]* u_fw_cc[1][0] # np.transpose(u_g2g).dot(u_fw_cc)
+           
+                aot = self.avoid_obstacle_twist
+                ggt = go2goal_twist
+                twist = Twist()
+                twist.linear.x = 0.0
+                twist.linear.y = 0.0
+                twist.linear.z = 0.0
+                twist.angular.x = 0.0
+                twist.angular.y = 0.0
+                twist.angular.z = 0.0
+                if( self.fsm.isstate( 'Go2GoalState' )):
+                    # print "Current State : Go2GolemState"
+                    twist = go2goal_twist
+                    # twist.linear.x  = ggt.linear.x
+                    # twist.angular.z = ggt.angular.z
+                elif( self.fsm.isstate( 'FollowWallClockwiseState' ) ):
+                    print "Current State : FollowWallClockwiseState"
+                    twist.linear.x  = u_fw_c[0][0]
+                    twist.angular.z = u_fw_c[1][0]
+                    # print "u_fw_c : "
+                    # print u_fw_c
+                    # print "tan of direction : %lf"%(u_fw_c[1][0] / u_fw_c[0][0])
+                    (x,y,z,w) = quaternion_from_euler(0, 0, atan(u_fw_c[1][0] / u_fw_c[0][0]) )
+                    fw.pose.orientation = Quaternion(x,y,z,w)
+
+                elif( self.fsm.isstate( 'AvoidObstacleState' ) ):
+                    # print "Current State : AvoidObstacleState"
+                    twist.linear.x  = aot.linear.x
+                    twist.angular.z = aot.angular.z
+                elif( self.fsm.isstate( 'FollowWallCounterClockwiseState' ) ):
+                    print "Current State : FollowWallCounterClockwiseState"
+                    twist.linear.x  = u_fw_cc[0][0]
+                    twist.angular.z = u_fw_cc[1][0]
+                    # print "u_fw_cc : "
+                    # print u_fw_cc
+                    # print "tan of direction : %lf"%(u_fw_cc[1][0] / u_fw_cc[0][0])
+                    (x,y,z,w) = quaternion_from_euler(0, 0, atan(u_fw_cc[1][0] / u_fw_cc[0][0]) )
+                    fw.pose.orientation = Quaternion(x,y,z,w)
                 
-                # rospy.loginfo("EulerYaw %lf "%yaw)
+                # Follow Wall Direction
+                self.fw_direction.publish(fw)
 
-                # // tf2::Quaternion quat_tf;
-                # // tf2::fromMsg(msg->pose.pose.orientation, quat_tf);
-                
-                # // tf2Scalar angle = quat_tf.getAngle();
+                # print "TWIST %lf , %lf"%(twist.linear.x,twist.angular.z)
+                # print "ip_c %lf , ip_cc %lf"%(ip_c,ip_cc)
 
-                # // Matrix<double> theta            = { { cos(msg->pose.pose.orientation.z) , sin(msg->pose.pose.orientation.z) },
-                # //                                     { -sin(msg->pose.pose.orientation.z) , cos(msg->pose.pose.orientation.z) }
-                # // };
-                # // Matrix<double> theta            = { { cos(-yaw) , sin(-yaw) },
-                # //                                     { -sin(-yaw) , cos(-yaw) }
-                # // };
-                theta            = np.array([
-                    [cos(yaw) , sin(yaw)],
-                    [-sin(yaw) , cos(yaw)]
-                ])
-                
-                e_g2g                       = robot_dest - robot_post
-                # // e_g2g                       = robot_post - robot_dest;
-                # // ROS_INFO("TEST5b"); 
-                # print e_g2g
-                e_g2g                       = e_g2g + 0.001
-                # print e_g2g
-                # print '===================='
-                # // ROS_INFO("TEST5c"); 
-                
-                # // e_g2g.PrintMatrix();
+                # TODO : Remove comment to control robot automactivily
+                self.new_twist.publish(twist)
 
-                alpha = 10.0
-                # // double k = BURGER_MAX_LIN_VEL*( 1 - (exp( -alpha*e_g2g.normf()*e_g2g.normf() ) ) / (e_g2g.normf()) );
-                e_g2g_normf = np.linalg.norm(e_g2g)
-                # print "e_g2g_normf : %lf"%e_g2g_normf
-                k = BURGER_MAX_LIN_VEL*( (1 - exp( -alpha*e_g2g_normf*e_g2g_normf ))  / ( e_g2g_normf ) )
+                # Next State   
+                # if distance between turtlbot3 and goal is smaller than obstacle , Go2Goal first     
+                if( self.fsm.isstate( 'Go2GoalState' ) ):
+                    if( not self.EuclideanDistance(self.GoalOfRobot , msg.pose.pose.position) <= self.obstacle_distance ):
+                        if(ip_c > 0):
+                            self.fsm.TurnClockwise()
+                        elif(ip_cc > 0):
+                            self.fsm.TurnCounterClockwise()
+                elif( self.fsm.isstate( 'FollowWallClockwiseState' ) ):
+                    if(self.obstacle_distance > self.DangerDistance):
+                        self.fsm.InSafeDistance()
+                    elif(self.obstacle_distance < self.DangerDistance - 0.1):
+                        self.fsm.InDangerDistance()
+                elif( self.fsm.isstate( 'AvoidObstacleState' ) ):
+                    if(ip_c > 0):
+                        self.fsm.TurnClockwise()
+                    elif(ip_cc > 0):
+                        self.fsm.TurnCounterClockwise()
 
-                # // ROS_INFO("TEST6"); 
-                # print "K : %lf"%k
-                # print "Yaw : %lf"%yaw
-                u_g2g                       = e_g2g * k
-                # print theta
-                # print "VA:"
-                # print va
-                # print "theta:"
-                # print theta
-                # print "u_g2g:"
-                # print u_g2g
-                # print '===================='
-
-                # // u_g2g.PrintMatrix();
-                rlt                         = va.dot(theta).dot(u_g2g); 
-                # print rlt
-                # print '===================='
-
-                # rospy.loginfo("rlt value")
-                # print rlt
-                self.go2goal_twist.linear.x = rlt[0][0]
-                self.go2goal_twist.linear.y = 0.0
-                self.go2goal_twist.linear.z = 0.0
-
-                self.go2goal_twist.angular.x = 0.0
-                self.go2goal_twist.angular.y = 0.0
-                self.go2goal_twist.angular.z = rlt[1][0]
-                # print "Test Go2Goal Twist"
-                # print self.go2goal_twist
-            # self.new_twist.publish(twist);
-                #// ROS_INFO("Update Twist");
-    def getPoseCallback(self,msg):
-        self.getGo2GoalTwist(msg)
-
-        # Avoid Obstacle Direction
-        ps = PoseStamped()
-        ps.header.frame_id = 'odom'
-        ps.header.stamp = rospy.Time.now()
-        ps.pose.position = msg.pose.pose.position
-        (x,y,z,w) = quaternion_from_euler(0, 0, self.obstacle_degree + pi)
-        ps.pose.orientation = Quaternion(x,y,z,w)
-        self.ao_direction.publish(ps)
-
-        # Follow Wall Direction
-        fw = PoseStamped()
-        fw.header.frame_id = 'odom'
-        fw.header.stamp = rospy.Time.now()
-        fw.pose.position = msg.pose.pose.position
-        
-        self.fw_direction.publish(fw)
-        
-
-
-
-        # beta = 1.0
-        # delta = 1 - exp( -beta * self.obstacle_distance)
-        # # print "obstacle_distance"
-        # # print self.obstacle_distance
-        # # print "delta"
-        # # print delta
-        # twist = Twist()
-        # aot = self.avoid_obstacle_twist
-        # ggt = self.go2goal_twist
-        
-        # self.ao_twist_cv.acquire()
-
-        # twist.linear.x = delta*ggt.linear.x + (1 - delta)*aot.linear.x
-        # twist.linear.y = 0.0
-        # twist.linear.z = 0.0
-
-        # twist.angular.x = 0.0
-        # twist.angular.y = 0.0
-        # twist.angular.z = delta*ggt.angular.z + (1 - delta)*aot.angular.z
-
-        # self.ao_twist_cv.notify()
-        # self.ao_twist_cv.release()
-
-        # # print "Go2Goal Twist"
-        # # print self.go2goal_twist
-        # # print "Avoid Obstacle Twist"
-        # # print self.avoid_obstacle_twist
-        # # print "Twist"
-        # # print twist
-
-        # Avoid Obstacle
-        u_ao = np.array([ [ self.avoid_obstacle_twist.linear.x ] 
-                        , [ self.avoid_obstacle_twist.angular.z ] ])
-        # Go2Goal
-        u_g2g = np.array([ [ self.go2goal_twist.linear.x ] 
-                        , [ self.go2goal_twist.angular.z ] ])
-        # Follow Wall
-        alpha = 1
-        # Clockwise
-        u_fw_c = alpha * np.array([ [0,1],[-1,0] ]).dot(u_ao)
-        # CounterClockwise
-        u_fw_cc = alpha * np.array([ [0,-1],[1,0] ]).dot(u_ao)
-
-        # inner product of Follow Wall and Go2Goal
-        #inner product of Clockwise
-        ip_c = u_g2g[0][0]* u_fw_c[0][0] + u_g2g[1][0]* u_fw_c[1][0] # np.transpose(u_g2g).dot(u_fw_c)
-        ip_cc = u_g2g[0][0]* u_fw_cc[0][0] + u_g2g[1][0]* u_fw_cc[1][0] # np.transpose(u_g2g).dot(u_fw_cc)
-   
-        aot = self.avoid_obstacle_twist
-        ggt = self.go2goal_twist
-        twist = Twist()
-        twist.linear.x = 0.0
-        twist.linear.y = 0.0
-        twist.linear.z = 0.0
-        twist.angular.x = 0.0
-        twist.angular.y = 0.0
-        twist.angular.z = 0.0
-        if( self.fsm.isstate( 'Go2GoalState' ) ):
-            # print "Current State : Go2GolemState"
-            twist = self.go2goal_twist
-            # twist.linear.x  = ggt.linear.x
-            # twist.angular.z = ggt.angular.z
-        elif( self.fsm.isstate( 'FollowWallClockwiseState' ) ):
-            # print "Current State : FollowWallClockwiseState"
-            twist.linear.x  = u_fw_c[0][0]
-            twist.angular.z = u_fw_c[1][0]
-            print "u_fw_c : "
-            print u_fw_c
-            print "tan of direction : %lf"%(u_fw_c[1][0] / u_fw_c[0][0])
-            (x,y,z,w) = quaternion_from_euler(0, 0, atan(u_fw_c[1][0] / u_fw_c[0][0]) )
-            fw.pose.orientation = Quaternion(x,y,z,w)
-
-        elif( self.fsm.isstate( 'AvoidObstacleState' ) ):
-            # print "Current State : AvoidObstacleState"
-            twist.linear.x  = aot.linear.x
-            twist.angular.z = aot.angular.z
-        elif( self.fsm.isstate( 'FollowWallCounterClockwiseState' ) ):
-            # print "Current State : FollowWallCounterClockwiseState"
-            twist.linear.x  = u_fw_cc[0][0]
-            twist.angular.z = u_fw_cc[1][0]
-            print "u_fw_cc : "
-            print u_fw_cc
-            print "tan of direction : %lf"%(u_fw_cc[1][0] / u_fw_cc[0][0])
-            (x,y,z,w) = quaternion_from_euler(0, 0, atan(u_fw_cc[1][0] / u_fw_cc[0][0]) )
-            fw.pose.orientation = Quaternion(x,y,z,w)
-        # Follow Wall Direction
-        self.fw_direction.publish(fw)
-
-        # print "TWIST %lf , %lf"%(twist.linear.x,twist.angular.z)
-        # print "ip_c %lf , ip_cc %lf"%(ip_c,ip_cc)
-
-        # TODO : Remove comment to control robot automactivily
-        # self.new_twist.publish(twist)
-
-        # Next State        
-        if( self.fsm.isstate( 'Go2GoalState' ) ):
-            if(ip_c > 0):
-                self.fsm.TurnClockwise()
-            elif(ip_cc > 0):
-                self.fsm.TurnCounterClockwise()
-        elif( self.fsm.isstate( 'FollowWallClockwiseState' ) ):
-            if(self.obstacle_distance > self.DangerDistance):
-                self.fsm.InSafeDistance()
-            elif(self.obstacle_distance < self.DangerDistance - 0.1):
-                self.fsm.InDangerDistance()
-        elif( self.fsm.isstate( 'AvoidObstacleState' ) ):
-            if(ip_c > 0):
-                self.fsm.TurnClockwise()
-            elif(ip_cc > 0):
-                self.fsm.TurnCounterClockwise()
-
-                # TODO: Whicj=h state should we go if we dont need to follow wall ?
-        elif( self.fsm.isstate( 'FollowWallCounterClockwiseState' ) ):
-            if(self.obstacle_distance > self.DangerDistance):
-                self.fsm.InSafeDistance()
-            elif(self.obstacle_distance < self.DangerDistance - 0.1):
-                self.fsm.InDangerDistance()
+                        # TODO: Whicj=h state should we go if we dont need to follow wall ?
+                elif( self.fsm.isstate( 'FollowWallCounterClockwiseState' ) ):
+                    if(self.obstacle_distance > self.DangerDistance):
+                        self.fsm.InSafeDistance()
+                    elif(self.obstacle_distance < self.DangerDistance - 0.1):
+                        self.fsm.InDangerDistance()
 
 #Some Constant
 BURGER_MAX_LIN_VEL  = 0.22
