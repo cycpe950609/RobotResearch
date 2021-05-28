@@ -406,6 +406,9 @@ class Go2GoalAction(object):
                 go2goal_twist.angular.z = 0.0
                 self.new_twist.publish(go2goal_twist)
 
+                # Reset State
+                self.state = 'GO2GOALSTATE'
+                self.follow_wall_choosen = 'NONE'
                 # self.fsm.ResetState()
 
             else :
