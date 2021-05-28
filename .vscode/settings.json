@@ -6,6 +6,13 @@
     ],
     "files.associations": {
         "initializer_list": "cpp",
-        "condition_variable": "cpp"
-    }
+        "condition_variable": "cpp",
+        "iterator": "cpp",
+        "plane": "cpp"
+    },
+    "python.analysis.extraPaths": [
+        "/home/computeruser/robot_ws/devel_isolated/square_walk_control/lib/python2.7/dist-packages",
+        "/home/computeruser/catkin_ws/devel/lib/python2.7/dist-packages",
+        "/opt/ros/melodic/lib/python2.7/dist-packages"
+    ]
 }

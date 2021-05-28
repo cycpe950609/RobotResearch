@@ -11,10 +11,13 @@ tmux new-window -t turtlebot3simulation:2 -n 'SetGoalServer' 'rosrun set_goal_gu
 echo 'Start SetGoalServer'
 tmux new-window -t turtlebot3simulation:3 -n 'SetGoalGUI' 'rosrun rviz rviz -d $(rospack find set_goal_gui_rviz)/rviz/set_goal_gui_rviz.rviz'
 echo 'Start SetGoalGUI'
-tmux new-window -t turtlebot3simulation:4 -n 'RobotNavigation' 'roslaunch robot_navigation robot_navigation.launch ; cat /dev/tty '
+# tmux new-window -t turtlebot3simulation:4 -n 'RobotNavigation' 'roslaunch robot_navigation robot_navigation.launch'
+tmux new-window -t turtlebot3simulation:4 -n 'RobotNavigation' 'roslaunch turtlebot3_teleop turtlebot3_teleop_key.launch'
+ 
 echo 'Start RobotNavigation'
-tmux new-window -t turtlebot3simulation:5 -n 'Cartographer' 'roslaunch turtlebot3_slam turtlebot3_slam.launch slam_methods:=cartographer open_rviz:=false'
-echo 'Start Cartographer'
+# tmux new-window -t turtlebot3simulation:5 -n 'Cartographer' 'roslaunch turtlebot3_slam turtlebot3_slam.launch slam_methods:=cartographer open_rviz:=false'
+tmux new-window -t turtlebot3simulation:5 -n 'GMapping' 'roslaunch turtlebot3_slam turtlebot3_slam.launch slam_methods:=gmapping open_rviz:=false configuration_basename:=turtlebot3_lds_2d_gazebo.lua'
+echo 'Start GMapping'
 tmux new-window -t turtlebot3simulation:6 -n 'Turtlebot3' 'ssh user@turtlebot3.local'
 echo 'Start Turtlebot3 SSH'
 
