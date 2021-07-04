@@ -1,0 +1,30 @@
+... logging to /home/computeruser/.ros/log/3072cce4-db38-11eb-a9f7-02424a230c83/roslaunch-user-21919.log
+Checking log directory for disk usage. This may take a while.
+Press Ctrl-C to interrupt
+Done checking log file disk usage. Usage is <1GB.
+]2;/opt/ros/melodic/share/turtlebot3_bringup/launch/turtlebot3_remote.launch
+[1mstarted roslaunch server http://192.168.43.147:41155/[0m
+
+SUMMARY
+========
+
+PARAMETERS
+ * /robot_description: <?xml version="1....
+ * /robot_state_publisher/publish_frequency: 50.0
+ * /robot_state_publisher/tf_prefix: 
+ * /rosdistro: melodic
+ * /rosversion: 1.14.11
+
+NODES
+  /
+    robot_state_publisher (robot_state_publisher/robot_state_publisher)
+
+[1mROS_MASTER_URI=http://192.168.43.147:11311[0m
+]2;/opt/ros/melodic/share/turtlebot3_bringup/launch/turtlebot3_remote.launch http://192.168.43.147:11311
+[1mprocess[robot_state_publisher-1]: started with pid [22094][0m
+[1m[robot_state_publisher-1] process has finished cleanly
+log file: /home/computeruser/.ros/log/3072cce4-db38-11eb-a9f7-02424a230c83/robot_state_publisher-1*.log[0m
+all processes on machine have died, roslaunch will exit
+shutting down processing monitor...
+... shutting down processing monitor complete
+[1mdone[0m

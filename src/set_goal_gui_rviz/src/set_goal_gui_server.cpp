@@ -66,7 +66,9 @@ void frameCallback(const nav_msgs::Odometry::ConstPtr& msg)
 
   auto txt =  stg("Turtlebot3\n") + 
               stg("( ") + std::to_string(msg->pose.pose.position.x) + stg(" , ") + std::to_string(msg->pose.pose.position.y) + stg(" )\n") +
-              stg("Distance : ") + std::to_string(EuclideanDistance(msg->pose.pose.position,GoalOfRobot ));
+              stg("Distance : ") + std::to_string(EuclideanDistance(msg->pose.pose.position,GoalOfRobot )) + stg("\n") + 
+              stg( ( isGo2Goal ) ? "Going to Goal" : "At Goal :D" )
+              ;
   goal_mutex.unlock();
   goal_cv.notify_all();
 
