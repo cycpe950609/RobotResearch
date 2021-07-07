@@ -14,7 +14,6 @@ import threading
 import numpy as np
 from ROSLogger import ROSLogger as Logger
 # from fysom import Fysom
-import signal
 import sys
 
 

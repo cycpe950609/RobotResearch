@@ -3,7 +3,6 @@ import rosbag
 from datetime import datetime
 import robot_navigation.msg
 import rospy
-import std_msgs
 from std_msgs.msg import Bool,String,Int64,Float64,UInt64
 import threading
 
