@@ -1,6 +1,6 @@
 #!/bin/sh
 export ROS_HOSTNAME=192.168.122.1 && export ROS_MASTER_URI=http://192.168.122.1:11311 
-
+# export ROS_HOME=$PWD
 # Start Turtlebot3simulation
 tmux new-session -d -s turtlebot3simulation -n 'roscore' 'roscore'
 echo 'Start roscore'

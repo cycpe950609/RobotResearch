@@ -1,5 +1,3 @@
 <launch>
-    <node pkg="robot_navigation" type="RobotNavigation" name="robot_navigation" output="screen">
-        
-    </node>
+    <node pkg="robot_navigation" type="RobotNavigation" name="robot_navigation" output="screen"/>
 </launch>

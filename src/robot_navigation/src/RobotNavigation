@@ -12,8 +12,10 @@ import actionlib
 from math import e, pi,cos,sin,sqrt,exp,atan,acos
 import threading
 import numpy as np
+from ROSLogger import ROSLogger as Logger
 # from fysom import Fysom
-
+import signal
+import sys
 
 
 class Go2GoalAction(object):
@@ -24,9 +26,11 @@ class Go2GoalAction(object):
     GoalOfRobot = Point(0,0,0)
     g2g_cv = threading.Condition()
     ao_twist_cv = threading.Condition()
+    shutdown_cv = threading.Condition()
 
 
     def __init__(self, name):
+        self._is_shutdown = False
         rospy.loginfo("Init RobotNavigationServer")
         self.dis_sub = rospy.Subscriber('scan', LaserScan, self.getDistanceCallback)
         self.avoid_obstacle_twist = Twist()
@@ -89,12 +93,24 @@ class Go2GoalAction(object):
 
         self.follow_wall_choosen = 'NONE'
         self.last_distance_to_goal = 0.0
+    
+    def Shutdown(self):
+        self._is_shutdown = True
+        while(self._is_shutdown == True):
+            try:
+                self.shutdown_cv.acquire()
+                self.shutdown_cv.wait()
+            finally:
+                self.shutdown_cv.release()
+        rospy.loginfo("Go2Goal Server END")
 
     def execute_cb(self, goal):
         self.isGo2Goal = True
         self.GoalOfRobot.x = goal.Goal.x
         self.GoalOfRobot.y = goal.Goal.y
         self.GoalOfRobot.z = goal.Goal.z
+        
+        LOG.LogFunction('execute_cb_getGoal')
 
         rospy.loginfo("Get goal ( %lf , %lf , %lf )"%(goal.Goal.x , goal.Goal.y , goal.Goal.z))
 
@@ -145,6 +161,8 @@ class Go2GoalAction(object):
 
     def getDistanceCallback(self,msg): # Callback of Lidar
 
+        LOG.LogFunction('getDistanceCallback')
+        
         self.LaserScanMsg = msg
 
         # print ( "First Value %f , Last Value %f" )%( msg.ranges[0], msg.ranges[359] )
@@ -160,6 +178,8 @@ class Go2GoalAction(object):
         # self.obstacle_distance = msg.ranges[0]
         # self.obstacle_degree = self.direction
 
+        LOG.LogNumber('obstacle_distance','at getDistanceCallback',self.obstacle_distance)
+        LOG.LogNumber('obstacle_degree','at getDistanceCallback',self.obstacle_degree)
 
 
         # print "direction : %lf , obstacle_degree : %lf"%(self.direction,obstacle_degree)
@@ -188,9 +208,9 @@ class Go2GoalAction(object):
             
             
 
-            rospy.loginfo(("ObstacleDistance : %lf")%self.obstacle_distance)
+            # rospy.loginfo(("ObstacleDistance : %lf")%self.obstacle_distance)
             # print(k)
-            rospy.loginfo(("ObstacleDegree : %lf")%( self.obstacle_degree + pi ))
+            # rospy.loginfo(("ObstacleDegree : %lf")%( self.obstacle_degree + pi ))
             # print('u : %lf , %lf'%( u[0], u[1] ) )  
 
             self.avoid_obstacle_twist.linear.x = u[0]
@@ -225,6 +245,7 @@ class Go2GoalAction(object):
         return list[index-1]
     def getGo2GoalTwist(self,msg):
 
+        LOG.LogFunction('getGo2GoalTwist')
         # rospy.loginfo((" New Position : %lf , %lf")%( msg.pose.pose.position.x , msg.pose.pose.position.y))
         robot_post                      = np.array([
             [msg.pose.pose.position.x],
@@ -367,7 +388,7 @@ class Go2GoalAction(object):
         x = v[0]
         y = v[1]
         r = sqrt(x ** 2 + y ** 2)
-        rospy.loginfo("VectorAO : ( %lf , %lf ) ",v[0],v[1])
+        # rospy.loginfo("VectorAO : ( %lf , %lf ) ",v[0],v[1])
         theta = 0
         if(r != 0):
             theta = acos(x/r)
@@ -382,7 +403,7 @@ class Go2GoalAction(object):
         else:
             twist = [0,0]
 
-        rospy.loginfo("TwistAO : ( %lf , %lf ) ",twist[0],twist[1])
+        # rospy.loginfo("TwistAO : ( %lf , %lf ) ",twist[0],twist[1])
         return twist
 
 
@@ -396,6 +417,8 @@ class Go2GoalAction(object):
 
     def getPoseCallback(self,msg):
 
+        LOG.LogFunction('getPoseCallback')
+        
         # Get Euler Angle from Quaternion
         (r, p, yaw) = euler_from_quaternion([msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w])
         self.direction = yaw
@@ -412,6 +435,7 @@ class Go2GoalAction(object):
 
             if(goal_distance <= DistanceError): # // Arrive goal
                 # rospy.loginfo("Go2Goal Success")
+                LOG.LogFunction('is_arrive_goal')
                 go2goal_twist = Twist()
                 go2goal_twist.linear.x = 0.0
                 go2goal_twist.linear.y = 0.0
@@ -428,12 +452,40 @@ class Go2GoalAction(object):
                 self.g2g_cv.release()
 
                 self.new_twist.publish(go2goal_twist)
+            elif(self._is_shutdown):
+                # LOG.LogFunction('is_shutdown_requested')
+                self._as.set_aborted()
+                self.g2g_cv.acquire()
+                self.isGo2Goal = False
+                self.g2g_cv.notify()
+                self.g2g_cv.release()
+                go2goal_twist = Twist()
+                go2goal_twist.linear.x = 0.0
+                go2goal_twist.linear.y = 0.0
+                go2goal_twist.linear.z = 0.0
+
+                go2goal_twist.angular.x = 0.0
+                go2goal_twist.angular.y = 0.0
+                go2goal_twist.angular.z = 0.0
+                self.new_twist.publish(go2goal_twist)
+                rospy.loginfo('is_shutdown_requested')
+
+                # Reset State
+                self.state = 'GO2GOALSTATE'
+                self.follow_wall_choosen = 'NONE'
+
+                self.shutdown_cv.acquire()
+                self._is_shutdown = False
+                self.shutdown_cv.notify()
+                self.shutdown_cv.release()
 
 
             elif (self._as.is_preempt_requested() ):
                 # // Notify action cancellation
                 # rospy.loginfo("py_go_to_goal_control : Preempted")
                 # // Action cancellation and consider action as failure and save to variable
+                LOG.LogFunction('is_preempt_requested')
+
                 self._as.set_preempted()
                 self.g2g_cv.acquire()
                 self.isGo2Goal = False
@@ -552,6 +604,8 @@ class Go2GoalAction(object):
                 if(unit_goal_vector[0][0] < 0):
                     radian_between_x_coord_and_goal = 2*pi - radian_between_x_coord_and_goal
                 theta_goal = -(pi/2 - radian_between_x_coord_and_goal)
+                LOG.LogNumber('theta_goal','degree of Goal in Turtlebot\'s coordinate',float(theta_goal))
+
                 for i in range(360):
                     theta_tmp = msgLS.angle_min + i*msgLS.angle_increment + theta_goal
                     [x,y] = [ msgLS.ranges[i]* cos( theta_tmp ) , msgLS.ranges[i]* sin( theta_tmp ) ]
@@ -562,7 +616,8 @@ class Go2GoalAction(object):
                                 self.ObstacleInRobot2Goal = True
                                 break
                     self.ObstacleInRobot2Goal = False
-                rospy.loginfo("self.ObstacleInRobot2Goal : %s"%( self.ObstacleInRobot2Goal ) )
+                LOG.LogBool('ObstacleInRobot2Goal','',self.ObstacleInRobot2Goal)
+                # rospy.loginfo("self.ObstacleInRobot2Goal : %s"%( self.ObstacleInRobot2Goal ) )
 
                 # Next State   
                 # if distance between turtlbot3 and goal is smaller than obstacle , Go2Goal first  
@@ -592,13 +647,13 @@ class Go2GoalAction(object):
                     # DangerDistance < obstacle_distance <= WarningDistance
                     # elif( not self.ObstacleInRobot2Goal ):
                     elif( not self.ObstacleInRobot2Goal ):
-                        if(self.state != 'GO2GOALSTATE' ):
-                            rospy.loginfo("From state %s to GO2GOALSTATE"%self.state)
+                        # if(self.state != 'GO2GOALSTATE' ):
+                        #     rospy.loginfo("From state %s to GO2GOALSTATE"%self.state)
                         self.state = 'GO2GOALSTATE'
                     elif(self.follow_wall_choosen == 'NONE'):
                         if(ip_c > 0.0):
-                            if(self.state != 'FOLLOW_CLOCKWISE'):
-                                rospy.loginfo("From state %s to FOLLOW_CLOCKWISE"%self.state)
+                            # if(self.state != 'FOLLOW_CLOCKWISE'):
+                            #     rospy.loginfo("From state %s to FOLLOW_CLOCKWISE"%self.state)
 
                             self.last_distance_to_goal = self.EuclideanDistance(self.GoalOfRobot , msg.pose.pose.position)
                             self.follow_wall_choosen = "CLOCKWISE"
@@ -606,8 +661,8 @@ class Go2GoalAction(object):
                             self.state = "FOLLOW_CLOCKWISE"
 
                         elif(ip_cc > 0.0):
-                            if(self.state != 'FOLLOW_COUNTER_CLOCKWISE'):
-                                rospy.loginfo("From state %s to FOLLOW_COUNTER_CLOCKWISE"%self.state)
+                            # if(self.state != 'FOLLOW_COUNTER_CLOCKWISE'):
+                            #     rospy.loginfo("From state %s to FOLLOW_COUNTER_CLOCKWISE"%self.state)
 
                             self.last_distance_to_goal = self.EuclideanDistance(self.GoalOfRobot , msg.pose.pose.position)
                             self.follow_wall_choosen = "COUNTER_CLOCKWISE"
@@ -615,27 +670,29 @@ class Go2GoalAction(object):
                             self.state = 'FOLLOW_COUNTER_CLOCKWISE'
                     else:
                         if(self.follow_wall_choosen == "CLOCKWISE"):
-                            if(self.state != 'FOLLOW_CLOCKWISE'):
-                                rospy.loginfo("From state %s to FOLLOW_CLOCKWISE"%self.state)
+                            # if(self.state != 'FOLLOW_CLOCKWISE'):
+                            #     rospy.loginfo("From state %s to FOLLOW_CLOCKWISE"%self.state)
 
                             # self.fsm.TurnClockwise()
                             self.state = 'FOLLOW_CLOCKWISE'
                         else:
-                            if(self.state != 'FOLLOW_COUNTER_CLOCKWISE'):
-                                rospy.loginfo("From state %s to FOLLOW_COUNTER_CLOCKWISE"%self.state)
+                            # if(self.state != 'FOLLOW_COUNTER_CLOCKWISE'):
+                            #     rospy.loginfo("From state %s to FOLLOW_COUNTER_CLOCKWISE"%self.state)
 
                             # self.fsm.TurnCounterClockwise()
                             self.state = 'FOLLOW_COUNTER_CLOCKWISE'
                 else:
-                    if(self.state != 'GO2GOALSTATE'):
-                        rospy.loginfo("From state %s to GO2GOALSTATE"%self.state)
+                    # if(self.state != 'GO2GOALSTATE'):
+                    #     rospy.loginfo("From state %s to GO2GOALSTATE"%self.state)
                     self.state = 'GO2GOALSTATE'
 
+                LOG.LogString('state','Turtlebot3 state',self.state)
 
                 # if( self.fsm.isstate( 'Go2GoalState' )):
                 if( self.state == 'GO2GOALSTATE' ):
                     # print "Current State : Go2GoalState"
                     twist = go2goal_twist
+                    LOG.Log('Go2GoalTwist','Twist at Go2Goal State',twist)
                     # twist.linear.x  = ggt.linear.x
                     # twist.angular.z = ggt.angular.z
                     # rospy.loginfo("At GO2GOALSTATE : ( %lf , %lf )"%( twist.linear.x, twist.angular.z  ))
@@ -649,6 +706,7 @@ class Go2GoalAction(object):
                     # twist.angular.z = w[1] * u_ao[1]/abs(u_ao[1]) # 如果原本的Angular是負數，FOLLOW_WALL的Angular就要乘-1
                     twist.linear.x  = w[0]
                     twist.angular.z = w[1]
+                    LOG.Log('FollowWallClockwiseTwist','Twist at FollowWall Clockwise State',twist)
                     # print "u_fw_c : "
                     # print u_fw_c
                     # print "tan of direction : %lf"%(u_fw_c[1][0] / u_fw_c[0][0])
@@ -660,8 +718,8 @@ class Go2GoalAction(object):
                         # (x,y,z,w) = quaternion_from_euler(0, 0, self.obstacle_degree + pi*3/2 )
                         (x,y,z,w) = quaternion_from_euler(0, 0, self.obstacle_degree + pi/2)
                     fw.pose.orientation = Quaternion(x,y,z,w)
-                    rospy.loginfo("FOLLOW_CLOCKWISE Direction ( %lf , %lf )"%( u_fw_c[0][0] , u_fw_c[1][0] ) )
-                    rospy.loginfo("At FOLLOW_CLOCKWISE : ( %lf , %lf )"%( twist.linear.x, twist.angular.z  ))
+                    # rospy.loginfo("FOLLOW_CLOCKWISE Direction ( %lf , %lf )"%( u_fw_c[0][0] , u_fw_c[1][0] ) )
+                    # rospy.loginfo("At FOLLOW_CLOCKWISE : ( %lf , %lf )"%( twist.linear.x, twist.angular.z  ))
 
                 # elif( self.fsm.isstate( 'AvoidObstacleState' ) ):
                 elif( self.state == 'AVOID_OBSTACLE_STATE' ):
@@ -670,8 +728,9 @@ class Go2GoalAction(object):
                     # w = ( self.getTwistfromVectorAO([ aot.linear.x , aot.angular.z ]) )
                     twist.linear.x  = w[0]
                     twist.angular.z = w[1]
-                    rospy.loginfo("AVOID_OBSTACLE_STATE Direction ( %lf , %lf )"%( aot.linear.x , aot.angular.z ) )
-                    rospy.loginfo("At AVOID_OBSTACLE_STATE : ( %lf , %lf )"%( twist.linear.x, twist.angular.z  ))
+                    LOG.Log('AvoidObstacleTwist','Twist at AvoidObstacle State',twist)
+                    # rospy.loginfo("AVOID_OBSTACLE_STATE Direction ( %lf , %lf )"%( aot.linear.x , aot.angular.z ) )
+                    # rospy.loginfo("At AVOID_OBSTACLE_STATE : ( %lf , %lf )"%( twist.linear.x, twist.angular.z  ))
                 # elif( self.fsm.isstate( 'FollowWallCounterClockwiseState' ) ):
                 elif( self.state == 'FOLLOW_COUNTER_CLOCKWISE' ):
                     # print "Current State : FollowWallCounterClockwiseState"
@@ -679,6 +738,7 @@ class Go2GoalAction(object):
                     # w = ( self.getTwistfromVectorFW([u_fw_cc[0][0] , u_fw_cc[1][0]]) )
                     twist.linear.x  = w[0]
                     twist.angular.z = w[1]
+                    LOG.Log('FollowWallCounterClockwiseTwist','Twist at FollowWall Counter Clockwise State',twist)
                     # print "u_fw_cc : "
                     # print u_fw_cc
                     # print "tan of direction : %lf"%(u_fw_cc[1][0] / u_fw_cc[0][0])
@@ -690,8 +750,8 @@ class Go2GoalAction(object):
                         (x,y,z,w) = quaternion_from_euler(0, 0, self.obstacle_degree + pi*3/2)
                         # (x,y,z,w) = quaternion_from_euler(0, 0, self.obstacle_degree + pi/2 )
                     fw.pose.orientation = Quaternion(x,y,z,w)
-                    rospy.loginfo("FOLLOW_COUNTER_CLOCKWISE Direction ( %lf , %lf )"%( u_fw_cc[0][0] , u_fw_cc[1][0] ) )
-                    rospy.loginfo("At FOLLOW_COUNTER_CLOCKWISE : ( %lf , %lf )"%( twist.linear.x, twist.angular.z  ))
+                    # rospy.loginfo("FOLLOW_COUNTER_CLOCKWISE Direction ( %lf , %lf )"%( u_fw_cc[0][0] , u_fw_cc[1][0] ) )
+                    # rospy.loginfo("At FOLLOW_COUNTER_CLOCKWISE : ( %lf , %lf )"%( twist.linear.x, twist.angular.z  ))
 
                 # Follow Wall Direction
                 self.fw_direction.publish(fw)
@@ -699,7 +759,10 @@ class Go2GoalAction(object):
                 # print(twist)
                 # rospy.loginfo('twist : %lf , %lf'%( twist.linear.x, twist.angular.z ) )  
 
+                # LOG.Log('twist','Final Twist',twist)
                 self.new_twist.publish(twist)
+        # LOG.LogFunction('getPoseCallback_END')
+        # rospy.loginfo('getPoseCallback_END')
                 
 
 #Some Constant
@@ -709,11 +772,30 @@ DistanceError       = 0.1
 WarningDistance = 0.4
 DangerDistance = 0.2
 
+#       ifSaveLog,ifSaveTimeline
+LOG = Logger(True,False)
+
+def shutdown_handler():
+    rospy.loginfo("Get shutdown interrupt !")
+    rospy.loginfo("Wait for server end")
+    server.Shutdown()
+    rospy.loginfo("Server ended")
+    # while(server.isGo2Goal == True):
+    #     try:
+    #         rospy.loginfo("Wait for server end")
+    #         server.g2g_cv.acquire()# TODO : it will hang on here after ActionServer is preempted
+    #         server.g2g_cv.wait()
+    #     finally:
+    #         server.g2g_cv.release()
+    LOG.close()
+    rospy.loginfo("Finish shutdown, byebye ~")
+    sys.exit(0)
 
 if __name__ == '__main__':
     rospy.init_node('robot_navigation')
     server = Go2GoalAction('Go2GoalAction')
     # print "Test"
+    rospy.on_shutdown(shutdown_handler)
     rospy.spin()
     # try:
     #     rospy.init_node('robot_navigation')

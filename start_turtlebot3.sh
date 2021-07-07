@@ -1,6 +1,6 @@
 #!/bin/sh
 export ROS_HOSTNAME=192.168.43.147 && export ROS_MASTER_URI=http://192.168.43.147:11311 
-
+# export ROS_HOME=$PWD
 # Start Turtlebot3simulation
 tmux new-session -d -s turtlebot3simulation -n 'roscore' 'roscore'
 echo 'Start roscore'
@@ -14,7 +14,7 @@ echo 'Start SetGoalGUI'
 # tmux new-window -t turtlebot3simulation:4 -n 'RobotNavigation' 'roslaunch robot_navigation robot_navigation.launch'
 tmux new-window -t turtlebot3simulation:4 -n 'RobotNavigation' 'roslaunch robot_navigation robot_navigation.launch > robot_navigation.log'
 # tmux new-window -t turtlebot3simulation:4 -n 'RobotNavigation' 'roslaunch turtlebot3_teleop turtlebot3_teleop_key.launch'
- 
+
 echo 'Start RobotNavigation'
 # tmux new-window -t turtlebot3simulation:5 -n 'Cartographer' 'roslaunch turtlebot3_slam turtlebot3_slam.launch slam_methods:=cartographer open_rviz:=false'
 tmux new-window -t turtlebot3simulation:5 -n 'GMapping' 'roslaunch turtlebot3_slam turtlebot3_slam.launch slam_methods:=gmapping open_rviz:=false configuration_basename:=turtlebot3_lds_2d_gazebo.lua'
