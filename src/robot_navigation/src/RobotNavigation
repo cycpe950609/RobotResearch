@@ -42,6 +42,7 @@ class Go2GoalAction(object):
         self.obstacle_distance = float("inf")
         self.obstacle_degree = 0.0
         self.direction = 0.0
+        self.last_direction = 0.0
 
         # self.go2goal_twist = Twist()
         # self.go2goal_twist.linear.x = 0.0
@@ -65,6 +66,9 @@ class Go2GoalAction(object):
         self._action_name = name
         self._as = actionlib.SimpleActionServer(self._action_name, motion_stable_control.msg.Go2GoalAction, execute_cb=self.execute_cb, auto_start = False)
         self._as.start()
+
+        self.last_time = rospy.Time.now()
+
         rospy.loginfo("Robot Navigation Server Start Success")
 
         # # Init FSM
@@ -93,13 +97,14 @@ class Go2GoalAction(object):
         self.last_distance_to_goal = 0.0
     
     def Shutdown(self):
-        self._is_shutdown = True
-        while(self._is_shutdown == True):
-            try:
-                self.shutdown_cv.acquire()
-                self.shutdown_cv.wait()
-            finally:
-                self.shutdown_cv.release()
+        if(self.isGo2Goal == True):
+            self._is_shutdown = True
+            while(self._is_shutdown == True):
+                try:
+                    self.shutdown_cv.acquire()
+                    self.shutdown_cv.wait()
+                finally:
+                    self.shutdown_cv.release()
         rospy.loginfo("Go2Goal Server END")
 
     def execute_cb(self, goal):
@@ -129,31 +134,66 @@ class Go2GoalAction(object):
 
     def NormalizeSpeed(self , u):
         # 限制linear 和 anglar 的大小
+    
+        LINEAR_MAX = BURGER_MAX_LIN_VEL
+
+        # next_time = self.last_time + self.last_duration
+        # duration_time = next_time - rospy.Time.now()
+
+        # last_next_direction = ( self.last_direction + u[1] )
+        # now_next_direction  = ( self.direction + u[1]*duration_time.to_sec() )
+
+        # if(u[1] >= 0):# Turn left
+        #     if(now_next_direction <= last_next_direction):
+        #         ANGULAR_MAX = BURGER_MAX_ANG_VEL
+        #     else:# Turn left too much
+        #         ANGULAR_MAX = last_next_direction - self.direction
+        # else:# Turn right
+        #     if(now_next_direction >= last_next_direction):#
+        #         ANGULAR_MAX = BURGER_MAX_ANG_VEL
+        #     else:# Turn right too much
+        #         ANGULAR_MAX = self.direction - last_next_direction
+
+        # if(u[0]*duration_time.to_sec() > BURGER_MAX_ANG_VEL):
+        #     ANGULAR_MAX = BURGER_MAX_ANG_VEL
+        # else:
+        #     ANGULAR_MAX = BURGER_MAX_ANG_VEL*duration_time.to_sec()
+        # rospy.loginfo("ANGULAR_MAX : %lf"%(ANGULAR_MAX))
+
+        ANGULAR_MAX = BURGER_MAX_ANG_VEL
+
+        u[1] = self.last_direction + u[1] - self.direction
+
         w = [0,0]
-        if(u[0] > BURGER_MAX_LIN_VEL):# Linear
+        if(u[0] > LINEAR_MAX):# Linear
             # w[1] = u[1]*float(BURGER_MAX_LIN_VEL)/u[0]
             w[1] = u[1]
-            w[0] = float(BURGER_MAX_LIN_VEL)
+            w[0] = float(LINEAR_MAX)
             # print(u)
-        elif(u[0] < -BURGER_MAX_LIN_VEL):
+        elif(u[0] < -LINEAR_MAX):
             # w[1] = u[1]*float(-BURGER_MAX_LIN_VEL)/u[0]
             w[1] = u[1]
-            w[0] = float(-BURGER_MAX_LIN_VEL)
+            w[0] = float(-LINEAR_MAX)
 
 
 
-        if(w[1] > BURGER_MAX_ANG_VEL):# Angular
-            w[0] = w[0]*float(BURGER_MAX_ANG_VEL)/w[1]
-            w[1] = float(BURGER_MAX_ANG_VEL)
-        elif(u[1] < -BURGER_MAX_ANG_VEL):# Angular
-            w[0] = w[0]*float(-BURGER_MAX_ANG_VEL)/w[1]
-            w[1] = float(-BURGER_MAX_ANG_VEL)
+        if(w[1] > ANGULAR_MAX):# Angular
+            w[0] = w[0]*float(ANGULAR_MAX)/w[1]
+            w[1] = float(ANGULAR_MAX)
+        elif(u[1] < -ANGULAR_MAX):# Angular
+            w[0] = w[0]*float(-ANGULAR_MAX)/w[1]
+            w[1] = float(-ANGULAR_MAX)
 
         return w
 
     def getDistanceCallback(self,msg): # Callback of Lidar
 
         LOG.LogFunction('getDistanceCallback')
+
+        now_time = rospy.Time.now()
+        self.last_duration = self.last_time - now_time
+        self.last_time = now_time
+        self.last_direction = self.direction
         
         self.LaserScanMsg = msg
 
@@ -513,7 +553,9 @@ class Go2GoalAction(object):
                 # WHY : AvoidObstacle state時機器人不會後退？
                 # WHY : 機器人會往牆壁轉？ ANS : 可能是因為ROS的角度正向是`逆`時鐘方向, BUT 好像角度本來就是逆時鐘
 
-                if(self.obstacle_distance <= ( WarningDistance + DangerDistance )/2):
+                FollowWallDistance = ( WarningDistance + DangerDistance )/2
+
+                if(self.obstacle_distance <= FollowWallDistance):
                 # if(self.obstacle_distance <= WarningDistance ):
                     if(self.obstacle_distance <= DangerDistance):
                         if(self.state != 'AVOID_OBSTACLE_STATE' ):
@@ -526,20 +568,21 @@ class Go2GoalAction(object):
                     #       2. There is no obstacle before Turtlebot3
                     #       3. Turtlebot3 go to another size of obstacle
                     # elif(self.EuclideanDistance(self.GoalOfRobot , msg.pose.pose.position) < self.last_distance_to_goal):
+                    #     if(self.state == )
                     #     # self.fsm.TurnGo2Goal()
                     #     self.state = 'GO2GOALSTATE'
                     #     # self.follow_wall_choosen = 'NONE'
                     #     print("Turn Go2Goal")
                     # DangerDistance < obstacle_distance <= WarningDistance
                     # elif( not self.ObstacleInRobot2Goal ):
-                    elif( not self.ObstacleInRobot2Goal ):
-                        # if(self.state != 'GO2GOALSTATE' ):
-                        #     rospy.loginfo("From state %s to GO2GOALSTATE"%self.state)
-                        self.state = 'GO2GOALSTATE'
+                    # elif( not self.ObstacleInRobot2Goal ):
+                    #     # if(self.state != 'GO2GOALSTATE' ):
+                    #     #     rospy.loginfo("From state %s to GO2GOALSTATE"%self.state)
+                    #     self.state = 'GO2GOALSTATE'
                     elif(self.follow_wall_choosen == 'NONE'):
                         if(ip_c > 0.0):
-                            # if(self.state != 'FOLLOW_CLOCKWISE'):
-                            #     rospy.loginfo("From state %s to FOLLOW_CLOCKWISE"%self.state)
+                            if(self.state != 'FOLLOW_CLOCKWISE'):
+                                rospy.loginfo("From state %s to FOLLOW_CLOCKWISE"%self.state)
 
                             self.last_distance_to_goal = self.EuclideanDistance(self.GoalOfRobot , msg.pose.pose.position)
                             self.follow_wall_choosen = "CLOCKWISE"
@@ -547,29 +590,43 @@ class Go2GoalAction(object):
                             self.state = "FOLLOW_CLOCKWISE"
 
                         elif(ip_cc > 0.0):
-                            # if(self.state != 'FOLLOW_COUNTER_CLOCKWISE'):
-                            #     rospy.loginfo("From state %s to FOLLOW_COUNTER_CLOCKWISE"%self.state)
+                            if(self.state != 'FOLLOW_COUNTER_CLOCKWISE'):
+                                rospy.loginfo("From state %s to FOLLOW_COUNTER_CLOCKWISE"%self.state)
 
                             self.last_distance_to_goal = self.EuclideanDistance(self.GoalOfRobot , msg.pose.pose.position)
                             self.follow_wall_choosen = "COUNTER_CLOCKWISE"
                             # self.fsm.TurnCounterClockwise()
                             self.state = 'FOLLOW_COUNTER_CLOCKWISE'
                     else:
+                        current_distant_to_goal = self.EuclideanDistance(self.GoalOfRobot , msg.pose.pose.position)
                         if(self.follow_wall_choosen == "CLOCKWISE"):
-                            # if(self.state != 'FOLLOW_CLOCKWISE'):
-                            #     rospy.loginfo("From state %s to FOLLOW_CLOCKWISE"%self.state)
+                            if(self.state != 'FOLLOW_CLOCKWISE'):
+                                rospy.loginfo("From state %s to FOLLOW_CLOCKWISE"%self.state)
 
+                            if(current_distant_to_goal < self.last_distance_to_goal):
+                                # Get Next state
+                                if(self.obstacle_distance <= FollowWallDistance ):
+                                    self.state = 'FOLLOW_CLOCKWISE'
+                                else:
+                                    self.state = 'GO2GOALSTATE'
+                            else:
                             # self.fsm.TurnClockwise()
-                            self.state = 'FOLLOW_CLOCKWISE'
+                                self.state = 'FOLLOW_CLOCKWISE'
                         else:
-                            # if(self.state != 'FOLLOW_COUNTER_CLOCKWISE'):
-                            #     rospy.loginfo("From state %s to FOLLOW_COUNTER_CLOCKWISE"%self.state)
-
+                            if(self.state != 'FOLLOW_COUNTER_CLOCKWISE'):
+                                rospy.loginfo("From state %s to FOLLOW_COUNTER_CLOCKWISE"%self.state)
+                            if(current_distant_to_goal < self.last_distance_to_goal):
+                                # Get Next state
+                                if(self.obstacle_distance <= FollowWallDistance ):
+                                    self.state = 'FOLLOW_COUNTER_CLOCKWISE'
+                                else:
+                                    self.state = 'GO2GOALSTATE'
+                            else:
                             # self.fsm.TurnCounterClockwise()
-                            self.state = 'FOLLOW_COUNTER_CLOCKWISE'
+                                self.state = 'FOLLOW_COUNTER_CLOCKWISE'
                 else:
-                    # if(self.state != 'GO2GOALSTATE'):
-                    #     rospy.loginfo("From state %s to GO2GOALSTATE"%self.state)
+                    if(self.state != 'GO2GOALSTATE'):
+                        rospy.loginfo("From state %s to GO2GOALSTATE"%self.state)
                     self.state = 'GO2GOALSTATE'
 
                 LOG.LogString('state','Turtlebot3 state',self.state)
@@ -646,11 +703,11 @@ class Go2GoalAction(object):
                 
 
 #Some Constant
-BURGER_MAX_LIN_VEL  = 0.22/2
-BURGER_MAX_ANG_VEL  = 2.84/2
+BURGER_MAX_LIN_VEL  = 0.22
+BURGER_MAX_ANG_VEL  = 2.84
 DistanceError       = 0.1
-WarningDistance = 0.4
-DangerDistance = 0.2
+WarningDistance = 0.5
+DangerDistance = 0.3
 
 #       ifSaveLog,ifSaveTimeline
 LOG = Logger(True,False)
