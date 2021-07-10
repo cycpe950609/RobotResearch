@@ -1,6 +1,6 @@
 #!/usr/bin/env python2
 # coding=utf-8
-from math import exp,cos,sin,sqrt
+from math import acos, exp,cos, pi,sin,sqrt
 import rospy
 from Logger import LOG
 import numpy as np
@@ -29,7 +29,33 @@ class Go2GoalTwist(StateBase):
         return self._EuclideanDistance(self.GoalOfRobot , self._pose.position)
 
     def getDirection(self):
-        return [self.GoalOfRobot.x - self._pose.position.x , self.GoalOfRobot.y - self._pose.position.y]
+        direction = [self.GoalOfRobot.x - self._pose.position.x , self.GoalOfRobot.y - self._pose.position.y]
+        x = direction[0]
+        y = direction[1]
+        r = sqrt(x ** 2 + y ** 2)
+        theta = 0.0
+        degree = 0.0
+        if(r != 0):
+            theta = acos(x/r)
+        if(x > 0 and y > 0): # 第一象限
+            degree = theta
+        elif(x <= 0 and y > 0): # 第二象限
+            degree = theta
+        elif(x > 0 and y < 0): # 第四象限
+            degree = 2*pi - theta
+        elif(x < 0 and y < 0): # 第三象限
+            degree = 2*pi - theta
+        elif(x == 0 and y > 0):# y軸正向
+            degree = pi/2
+        elif(x < 0 and y == 0):# x軸負向
+            degree = pi
+        elif(x == 0 and y < 0):# y軸負向
+            degree = pi*3/2
+        elif(x > 0 and y == 0):# x軸正向
+            degree = 0.0
+        else:
+            degree = 0
+        return degree
 
     def getTwist(self):
 

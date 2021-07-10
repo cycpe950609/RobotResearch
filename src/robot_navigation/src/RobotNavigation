@@ -66,6 +66,7 @@ class Go2GoalAction(object):
         
         self.ao_direction = DirectionArrow('avoid_obstacle_direction')
         self.fw_direction = DirectionArrow('follow_wall_direction')
+        self._fw_direction = 0.0
         self.g2g_direction = DirectionArrow('go_to_goal_direction')
         self.ao_direction = DirectionArrow('avoid_obstacle_direction')
 
@@ -354,13 +355,14 @@ class Go2GoalAction(object):
                 # go2goal_twist = self.go2goal_twist.getGo2GoalTwist()
                 avoid_obstacle_twist = self.ao_twist.getTwist()
                 # Go2Goal
-                goal_vector = self.go2goal_twist.getDirection()
+                goal_direction = self.go2goal_twist.getDirection()
+                goal_vector = [ cos(goal_direction + pi/2) , sin(goal_direction + pi/2)  ]
                 # LOG.LogNumber('GoalVector_X','X of goal_vector',goal_vector[0])
                 # LOG.LogNumber('GoalVector_Y','Y of goal_vector',goal_vector[1])
                 u_g2g = np.transpose(goal_vector)
                 # Go2Goal Direction
                 unit_goal_vector = goal_vector/np.linalg.norm(goal_vector)
-                radian_between_x_coord_and_goal = np.arccos(unit_goal_vector[0])
+                # radian_between_x_coord_and_goal = np.arccos(unit_goal_vector[0])
                 # (x,y,z,w) = quaternion_from_euler(0, 0, radian_between_x_coord_and_goal )
 
                 # gg = PoseStamped()
@@ -370,7 +372,7 @@ class Go2GoalAction(object):
                 # gg.pose.orientation = Quaternion(x,y,z,w)
 
                 # self.g2g_direction.publish(gg)
-                self.g2g_direction.publish(radian_between_x_coord_and_goal)
+                self.g2g_direction.publish(goal_direction)
                 
                 
                 ################################################################
@@ -394,13 +396,13 @@ class Go2GoalAction(object):
 
                 # Check if Obstacle is in area between Robot and Goal
                 msgLS = self.LaserScanMsg
-                if(unit_goal_vector[0] < 0):
-                    radian_between_x_coord_and_goal = 2*pi - radian_between_x_coord_and_goal
-                theta_goal = -(pi/2 - radian_between_x_coord_and_goal)
-                LOG.LogNumber('theta_goal','degree of Goal in Turtlebot\'s coordinate',float(theta_goal))
+                # if(unit_goal_vector[0] < 0):
+                #     radian_between_x_coord_and_goal = 2*pi - radian_between_x_coord_and_goal
+                # theta_goal = -(pi/2 - radian_between_x_coord_and_goal)
+                LOG.LogNumber('goal_direction','degree of Goal in Turtlebot\'s coordinate',float(goal_direction))
 
                 for i in range(360):
-                    theta_tmp = msgLS.angle_min + i*msgLS.angle_increment + theta_goal
+                    theta_tmp = msgLS.angle_min + i*msgLS.angle_increment + goal_direction
                     [x,y] = [ msgLS.ranges[i]* cos( theta_tmp ) , msgLS.ranges[i]* sin( theta_tmp ) ]
                     if( msgLS.range_min < msgLS.ranges[i] < msgLS.range_max ):
                         if( -( DangerDistance )<= x <= ( DangerDistance ) ):
@@ -536,7 +538,8 @@ class Go2GoalAction(object):
                     #     # (x,y,z,w) = quaternion_from_euler(0, 0, self.obstacle_degree + pi*3/2 )
                     #     (x,y,z,w) = quaternion_from_euler(0, 0, self.obstacle_degree + pi/2)
                     # fw.pose.orientation = Quaternion(x,y,z,w)
-                    self.fw_direction.publish(self.fw_cw_twist.getDirection())#TODO : Add fw_direction
+                    self._fw_direction = self.fw_cw_twist.getDirection()
+                    # self.fw_direction.publish()#TODO : Add fw_direction
                     #endregion
 
                     # rospy.loginfo("FOLLOW_CLOCKWISE Direction ( %lf , %lf )"%( u_fw_c[0][0] , u_fw_c[1][0] ) )
@@ -573,7 +576,8 @@ class Go2GoalAction(object):
                     #     (x,y,z,w) = quaternion_from_euler(0, 0, self.obstacle_degree + pi*3/2)
                     #     # (x,y,z,w) = quaternion_from_euler(0, 0, self.obstacle_degree + pi/2 )
                     # fw.pose.orientation = Quaternion(x,y,z,w)
-                    self.fw_direction.publish(self.fw_ccw_twist.getDirection())#TODO : Add fw_direction
+                    self._fw_direction = self.fw_ccw_twist.getDirection()
+                    # self.fw_direction.publish(self.fw_ccw_twist.getDirection())#TODO : Add fw_direction
                     #endregion
                     # rospy.loginfo("FOLLOW_COUNTER_CLOCKWISE Direction ( %lf , %lf )"%( u_fw_cc[0][0] , u_fw_cc[1][0] ) )
                     # rospy.loginfo("At FOLLOW_COUNTER_CLOCKWISE : ( %lf , %lf )"%( twist.linear.x, twist.angular.z  ))
@@ -581,6 +585,7 @@ class Go2GoalAction(object):
                 # Follow Wall Direction
                 # self.fw_direction.publish(fw)
                 # LOG.Log('twist','Final Twist',twist)
+                self.fw_direction.publish(self._fw_direction)#TODO : Add fw_direction
                 self.new_twist.publish(twist)
         # LOG.LogFunction('getPoseCallback_END')
         # rospy.loginfo('getPoseCallback_END')

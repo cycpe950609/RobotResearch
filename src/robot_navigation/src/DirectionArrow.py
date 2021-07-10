@@ -8,7 +8,7 @@ import rospy
 class DirectionArrow(object):
     def __init__(self,Name):
         super(DirectionArrow,self).__init__()
-        self.direct_pub = rospy.Publisher('TEST', PoseStamped, queue_size=10)
+        self.direct_pub = rospy.Publisher(Name, PoseStamped, queue_size=10)
 
     def updatePose(self,pose):
         assert type(pose) is Pose, 'Must be Pose'

@@ -73,7 +73,7 @@ class FollowWallClockwiseTwist(fw_base):
         self._rotate_matrix = [ [0,1],[-1,0] ]
     
     def getDirection(self):
-        return (self._obstacle_degree + pi/2)%(2*pi)
+        return (self._direction + self._obstacle_degree + pi/2)%(2*pi)
 
 
 class FollowWallCounterClockwiseTwist(fw_base):
@@ -82,7 +82,7 @@ class FollowWallCounterClockwiseTwist(fw_base):
         self._rotate_matrix = [ [0,-1],[1,0] ]
     
     def getDirection(self):
-        return (self._obstacle_degree + pi*3/2)%(2*pi)
+        return ( self._direction + self._obstacle_degree + pi*3/2)%(2*pi)
 
 
 
