@@ -167,7 +167,15 @@ include_directories(
 ## in contrast to setup.py, you can choose the destination
 catkin_install_python(PROGRAMS
   src/RobotNavigation
-  # src/ROSLogger.py
+  src/AvoidObstacleTwist.py
+  src/Constant.py
+  src/DirectionArrow.py
+  src/FollowWallTwist.py
+  src/Go2GoalTwist.py
+  src/Logger.py
+  src/StateBase.py
+  # src/Vector2Twist.py
+  src/LaserScanSim.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
