@@ -57,13 +57,11 @@ class Go2GoalAction(object):
 
         # self.pub = rospy.Publisher('cmd_vel', Twist, queue_size=10)
 
-        self.odom_sub = rospy.Subscriber('odom',Odometry,self.getPoseCallback)
-        self.new_twist = rospy.Publisher('cmd_vel', Twist, queue_size=10)
-        # self.ao_direction = rospy.Publisher('avoid_obstacle_direction', PoseStamped, queue_size=10)
-        # self.fw_direction = rospy.Publisher('follow_wall_direction', PoseStamped, queue_size=10)
-        # self.g2g_direction = rospy.Publisher('go_to_goal_direction', PoseStamped, queue_size=10)
-        # self.ao_direction = rospy.Publisher('avoid_obstacle_direction', PoseStamped, queue_size=10)
-        
+        self.go2goal_twist = Go2GoalTwist()# We should put this before subscript to /odom,so that we wont have no go2goal_twist error
+        self.ao_twist = AvoidObstacleTwist()
+        self.fw_cw_twist = FollowWallClockwiseTwist()
+        self.fw_ccw_twist = FollowWallCounterClockwiseTwist()
+
         self.ao_direction = DirectionArrow('avoid_obstacle_direction')
         self.fw_direction = DirectionArrow('follow_wall_direction')
         self._fw_direction = 0.0
@@ -76,10 +74,6 @@ class Go2GoalAction(object):
 
         self.last_time = rospy.Time.now()
 
-        self.go2goal_twist = Go2GoalTwist()
-        self.ao_twist = AvoidObstacleTwist()
-        self.fw_cw_twist = FollowWallClockwiseTwist()
-        self.fw_ccw_twist = FollowWallCounterClockwiseTwist()
 
         rospy.loginfo("Robot Navigation Server Start Success")
 
@@ -108,6 +102,9 @@ class Go2GoalAction(object):
         self.follow_wall_choosen = 'NONE'
         self.last_distance_to_goal = 0.0
     
+        self.laser_sim_pub = rospy.Publisher('laser_scan_sim', LaserScan, queue_size=10)
+        self.odom_sub = rospy.Subscriber('odom',Odometry,self.getPoseCallback)
+        self.new_twist = rospy.Publisher('cmd_vel', Twist, queue_size=10)
     def _initTwist(self):
         rtv = Twist()
         rtv.linear.x = 0.0
@@ -126,6 +123,10 @@ class Go2GoalAction(object):
         return sqrt( dx*dx + dy*dy + dz*dz )
 
     def Shutdown(self):
+        # Unregister subscripter first , so that we wont get topic after shutdown the ActionServer
+        # 未知原因在Ctrl+C 關閉robot_navigation之後，會有機會產生ROSException: publish() to a closed topic
+        self.odom_sub.unregister()
+        self.dis_sub.unregister()# TODO: Test is this actually can fix ROSException ?
         if(self.isGo2Goal == True):
             self._is_shutdown = True
             while(self._is_shutdown == True):
@@ -170,6 +171,8 @@ class Go2GoalAction(object):
     def getDistanceCallback(self,msg): # Callback of Lidar
 
         LOG.LogFunction('getDistanceCallback')
+
+        LOG.Log('LaserScan','At getDistanceCallback',msg)
 
         now_time = rospy.Time.now()
         self.last_duration = self.last_time - now_time
@@ -258,7 +261,7 @@ class Go2GoalAction(object):
         self.fw_direction.updatePose(msg.pose.pose)
 
         # Update LaserScanMsg
-        self.LaserScanMsg.updateLaserSanWithPose(msg.pose)
+        self.LaserScanMsg.updateLaserScanWithPose(msg.pose.pose)
         self.ao_twist.updateLaserScan(self.LaserScanMsg)
         self.fw_cw_twist.updateLaserScan(self.LaserScanMsg)
         self.fw_ccw_twist.updateLaserScan(self.LaserScanMsg)
@@ -266,6 +269,10 @@ class Go2GoalAction(object):
         # Get Euler Angle from Quaternion
         (r, p, yaw) = euler_from_quaternion([msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w])
         self.direction = yaw
+
+        # Publish LaserScanSim
+        if(not self._is_shutdown):
+            self.laser_sim_pub.publish(self.LaserScanMsg)
 
         
         # goal_distance = self.EuclideanDistance(self.GoalOfRobot , msg.pose.pose.position)

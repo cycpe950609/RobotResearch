@@ -56,4 +56,5 @@ CATKIN_IGNORE
 # Log file
 *.log
 *.bag
+*.csv
 
