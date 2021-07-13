@@ -101,5 +101,8 @@ class StateBase(object):
     def getTwist(self):
         raise NotImplementedError
 
+    def getStateName(self):
+        return self.__class__.__name__
+
 
     
