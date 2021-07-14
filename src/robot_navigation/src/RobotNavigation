@@ -200,6 +200,8 @@ class Go2GoalAction(object):
                 self.g2g_cv.release()
 
                 self.new_twist.publish(g2g_twist)
+
+                rospy.loginfo("Arrive Goal")
             elif(self._is_shutdown):
                 # LOG.LogFunction('is_shutdown_requested')
                 self._as.set_aborted()
