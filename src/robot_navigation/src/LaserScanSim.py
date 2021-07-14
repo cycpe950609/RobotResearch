@@ -84,35 +84,35 @@ class LaserScanSim(LaserScan):
             self._first_init_pose = False
         else:
             self._pose = new_pose
-            # Update LaserScan
-            (r, p, _last_direction) = euler_from_quaternion([ self._last_pose.orientation.x,  self._last_pose.orientation.y,  self._last_pose.orientation.z, self._last_pose.orientation.w])
-            (r, p, ptn_dir) = euler_from_quaternion([ new_pose.orientation.x,  new_pose.orientation.y,  new_pose.orientation.z, new_pose.orientation.w])
-            LOG.LogNumber('_last_direction','At updateLaserScan',_last_direction)
-            LOG.LogNumber('ptn_dir','At updateLaserScan',ptn_dir)
+            # # Update LaserScan
+            # (r, p, _last_direction) = euler_from_quaternion([ self._last_pose.orientation.x,  self._last_pose.orientation.y,  self._last_pose.orientation.z, self._last_pose.orientation.w])
+            # (r, p, ptn_dir) = euler_from_quaternion([ new_pose.orientation.x,  new_pose.orientation.y,  new_pose.orientation.z, new_pose.orientation.w])
+            # LOG.LogNumber('_last_direction','At updateLaserScan',_last_direction)
+            # LOG.LogNumber('ptn_dir','At updateLaserScan',ptn_dir)
 
-            degree_pt0_ptnew = ( _last_direction - ptn_dir + 2*pi )%(2*pi)
-            # LOG.LogNumber('ptn_pt0_dir','At updateLaserScan',ptn_pt0_dir)
-            LOG.LogNumber('degree_pt0_ptnew','At updateLaserScan',degree_pt0_ptnew)
+            # degree_pt0_ptnew = ( _last_direction - ptn_dir + 2*pi )%(2*pi)
+            # # LOG.LogNumber('ptn_pt0_dir','At updateLaserScan',ptn_pt0_dir)
+            # LOG.LogNumber('degree_pt0_ptnew','At updateLaserScan',degree_pt0_ptnew)
 
-            # Get new range , new_range[i] is calculated from self._last_range[i] 
-            new_range = list(range(360))
-            pt_last = Point(self._last_pose.position.x , self._last_pose.position.y,0)
-            pt_new = Point(new_pose.position.x , new_pose.position.y,0)
-            for i in range(360):
-                r_last_a = self._last_ranges[i]
-                if(r_last_a < float('inf')):
-                    pt_a = Point(self._last_pose.position.x + r_last_a*cos(_last_direction + i*self.angle_increment) , self._last_pose.position.y + r_last_a*sin(_last_direction + i*self.angle_increment ),0 )
-                    new_range[i] = self._EuclideanDistance(pt_a,pt_new)
-                else:
-                    new_range[i] = float('inf')
-            # Shift range
-            last_new_index = (int( round(degree_pt0_ptnew / self.angle_increment) + 1 ))%(360)
-            # TODO: When Turtlebot3 rotate, LaserScanSim rotated , but LaserScan didnt
-            LOG.LogNumber('self.angle_increment','At updateLaserScan',self.angle_increment)
+            # # Get new range , new_range[i] is calculated from self._last_range[i] 
+            # new_range = list(range(360))
+            # pt_last = Point(self._last_pose.position.x , self._last_pose.position.y,0)
+            # pt_new = Point(new_pose.position.x , new_pose.position.y,0)
+            # for i in range(360):
+            #     r_last_a = self._last_ranges[i]
+            #     if(r_last_a < float('inf')):
+            #         pt_a = Point(self._last_pose.position.x + r_last_a*cos(_last_direction + i*self.angle_increment) , self._last_pose.position.y + r_last_a*sin(_last_direction + i*self.angle_increment ),0 )
+            #         new_range[i] = self._EuclideanDistance(pt_a,pt_new)
+            #     else:
+            #         new_range[i] = float('inf')
+            # # Shift range
+            # last_new_index = (int( round(degree_pt0_ptnew / self.angle_increment) + 1 ))%(360)
+            # # TODO: When Turtlebot3 rotate, LaserScanSim rotated , but LaserScan didnt
+            # LOG.LogNumber('self.angle_increment','At updateLaserScan',self.angle_increment)
 
-            for i in range(last_new_index):
-                new_range.append(new_range.pop(0))
-            self.ranges = new_range[:]
+            # for i in range(last_new_index):
+            #     new_range.append(new_range.pop(0))
+            # self.ranges = new_range[:]
         LOG.Log('LaserScanSim','At updateLaserScan',self)
             
     
@@ -128,28 +128,28 @@ class LaserScanSim(LaserScan):
         self.range_max = msg.range_max
         self.intensities = msg.intensities
 
-        # self.ranges = msg.ranges[:]
+        self.ranges = msg.ranges[:]
 
-        if(self._first_init_laser_scan):
-            ranges = range(360)
-            for i in range(360):
-                if( msg.range_min <= msg.ranges[i] < msg.range_max):
-                    ranges[i] = msg.ranges[i]
-                else:
-                    ranges[i] = float('inf')
-            self.ranges = tuple(ranges)
-            self._first_init_laser_scan = False
-        else:
-            ranges = range(360)
-            for i in range(360):
-                if( LASERSCAN_UPDATE_MIN < msg.ranges[i] < LASERSCAN_UPDATE_MAX ):
-                    ranges[i] = msg.ranges[i]
-                else:
-                    ranges[i] = self.ranges[i]
-            self.ranges = tuple(ranges)
-        # Update Last data
-        self._last_pose = self._pose
-        self._last_ranges = self.ranges[:]
+        # if(self._first_init_laser_scan):
+        #     ranges = range(360)
+        #     for i in range(360):
+        #         if( msg.range_min <= msg.ranges[i] < msg.range_max):
+        #             ranges[i] = msg.ranges[i]
+        #         else:
+        #             ranges[i] = float('inf')
+        #     self.ranges = tuple(ranges)
+        #     self._first_init_laser_scan = False
+        # else:
+        #     ranges = range(360)
+        #     for i in range(360):
+        #         if( LASERSCAN_UPDATE_MIN < msg.ranges[i] < LASERSCAN_UPDATE_MAX ):
+        #             ranges[i] = msg.ranges[i]
+        #         else:
+        #             ranges[i] = self.ranges[i]
+        #     self.ranges = tuple(ranges)
+        # # Update Last data
+        # self._last_pose = self._pose
+        # self._last_ranges = self.ranges[:]
 
-        LOG.Log('LaserScanSim','At updateLaserScan',self)
+        # LOG.Log('LaserScanSim','At updateLaserScan',self)
         
