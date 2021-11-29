@@ -58,3 +58,5 @@ CATKIN_IGNORE
 *.bag
 *.csv
 
+# analysis
+analysis/

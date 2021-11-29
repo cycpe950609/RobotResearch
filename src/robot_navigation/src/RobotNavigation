@@ -134,8 +134,8 @@ class Go2GoalAction(object):
         LOG.Log('LaserScan','At getDistanceCallback',msg)
 
         now_time = rospy.Time.now()
-        self.last_duration = self.last_time - now_time
         self.last_time = now_time
+        # self.last_duration = self.last_time - now_time
         self.last_direction = self.direction
         
         self.LaserScanMsg.updateLaserScan(msg)
@@ -153,6 +153,8 @@ class Go2GoalAction(object):
     def getPoseCallback(self,msg):
 
         LOG.LogFunction('getPoseCallback')
+
+        LOG.Log('odom','At getPoseCallback',msg)
 
         # Update Pose for twist
         self.go2goal_twist.updatePose(msg.pose.pose)
@@ -200,7 +202,7 @@ class Go2GoalAction(object):
                 self.g2g_cv.release()
 
                 self.new_twist.publish(g2g_twist)
-
+                self.LaserScanMsg.updateTwist(g2g_twist)
                 rospy.loginfo("Arrive Goal")
             elif(self._is_shutdown):
                 # LOG.LogFunction('is_shutdown_requested')
@@ -212,6 +214,7 @@ class Go2GoalAction(object):
                 g2g_twist = self._initTwist()
     
                 self.new_twist.publish(g2g_twist)
+                self.LaserScanMsg.updateTwist(g2g_twist)
                 rospy.loginfo('is_shutdown_requested')
 
                 # Reset State
@@ -234,6 +237,7 @@ class Go2GoalAction(object):
                 self.g2g_cv.release()
                 g2g_twist = self._initTwist()
                 self.new_twist.publish(g2g_twist)
+                self.LaserScanMsg.updateTwist(g2g_twist)
 
                 # Reset State
                 self.state = 'GO2GOALSTATE'
@@ -367,6 +371,7 @@ class Go2GoalAction(object):
 
                 self.fw_direction.publish(self._fw_direction)
                 self.new_twist.publish(twist)
+                self.LaserScanMsg.updateTwist(twist)
 
 def shutdown_handler():
     rospy.loginfo("Get shutdown interrupt !")

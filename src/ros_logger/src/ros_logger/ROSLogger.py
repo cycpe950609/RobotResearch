@@ -9,6 +9,7 @@ import threading
 class ROSLogger(object):
 
     logger_cv = threading.Condition()
+    _is_writing_log = False
 
     def __init__(self,ifSaveLog,ifSaveTimeline):
         super(ROSLogger,self).__init__()
@@ -24,8 +25,17 @@ class ROSLogger(object):
     #     self._bag.close()
 
     def close(self):
-        self._bag.close()
         self._ifSaveLog = False
+        while(self._is_writing_log == True):
+            try:
+                rospy.loginfo('Wait for Log finish writing')
+                self.logger_cv.acquire()
+                self.logger_cv.wait()
+            finally:
+                rospy.loginfo('Log finish writing')
+                self.logger_cv.release()
+        self._bag.flush()
+        # self._bag.close()
 
     def _createROSLogMSG(self):
         roslog = robot_navigation.msg.ROSLog()
@@ -56,7 +66,9 @@ class ROSLogger(object):
         ss = String()
         ss.data = FunctionName
         self.logger_cv.acquire()# Do we need mutex ? If we dont have this, will two message store to bag simultaneously ?
+        self._is_writing_log = True
         self._log(FunctionName,'Function','Function called',ss)
+        self._is_writing_log = False
         self.logger_cv.notify()
         self.logger_cv.release()
     
@@ -66,7 +78,9 @@ class ROSLogger(object):
         bl = Bool()
         bl.data = boolean_value
         self.logger_cv.acquire()# Do we need mutex ?
+        self._is_writing_log = True
         self._log(Name,'Boolean',About,bl)
+        self._is_writing_log = False
         self.logger_cv.notify()
         self.logger_cv.release()
     def LogNumber(self,Name,About,number):
@@ -80,7 +94,9 @@ class ROSLogger(object):
         num.data = number
 
         self.logger_cv.acquire()# Do we need mutex ?
+        self._is_writing_log = True
         self._log(Name,'Number',About,num)
+        self._is_writing_log = False
         self.logger_cv.notify()
         self.logger_cv.release()
 
@@ -91,7 +107,9 @@ class ROSLogger(object):
         ss.data = string_value
         
         self.logger_cv.acquire()# Do we need mutex ?
+        self._is_writing_log = True
         self._log(Name,'string',About,ss)
+        self._is_writing_log = False
         self.logger_cv.notify()
         self.logger_cv.release()
 
@@ -99,7 +117,9 @@ class ROSLogger(object):
         # name,type_name,about,variable
         # assert hasattr(variable,_type), 'Must be Message type of ROS'
         self.logger_cv.acquire()# Do we need mutex ?
+        self._is_writing_log = True
         self._log(Name,str(type(variable)),About,variable)
+        self._is_writing_log = False
         self.logger_cv.notify()
         self.logger_cv.release()
 
