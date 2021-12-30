@@ -8,7 +8,7 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Point,Twist
 from tf.transformations import euler_from_quaternion
 import actionlib
-from math import pi,cos,sin,sqrt
+from math import pi,cos,sin,sqrt,acos,floor,ceil
 import threading
 import numpy as np
 import sys
@@ -78,6 +78,9 @@ class Go2GoalAction(object):
         self.laser_sim_pub = rospy.Publisher('laser_scan_sim', LaserScan, queue_size=10)
         self.odom_sub = rospy.Subscriber('odom',Odometry,self.getPoseCallback)
         self.new_twist = rospy.Publisher('cmd_vel', Twist, queue_size=10)
+
+        # 機器人繞到障礙物的另一面
+        self._pose_when_start_follow_wall = Odometry()
 
     def _initTwist(self):
         rtv = Twist()
@@ -149,6 +152,35 @@ class Go2GoalAction(object):
     def getNthSmallNumberOfList(self,list,index):# index is start from 1 
         list.sort()
         return list[index-1]
+
+    def _vector2direction(self,vect):
+        x = vect[0]
+        y = vect[1]
+        r = sqrt(x ** 2 + y ** 2)
+        theta = 0.0
+        degree = 0.0
+        if(r != 0 and r < float('inf') ):
+            theta = acos(x/r)
+        if(x > 0 and y > 0): # 第一象限
+            degree = theta
+        elif(x <= 0 and y > 0): # 第二象限
+            degree = theta
+        elif(x > 0 and y < 0): # 第四象限
+            degree = 2*pi - theta
+        elif(x < 0 and y < 0): # 第三象限
+            degree = 2*pi - theta
+        elif(x == 0 and y > 0):# y軸正向
+            degree = pi/2
+        elif(x < 0 and y == 0):# x軸負向
+            degree = pi
+        elif(x == 0 and y < 0):# y軸負向
+            degree = pi*3/2
+        elif(x > 0 and y == 0):# x軸正向
+            degree = 0.0
+        else:
+            degree = 0
+        return degree
+
 
     def getPoseCallback(self,msg):
 
@@ -295,7 +327,7 @@ class Go2GoalAction(object):
                 # if(self.obstacle_distance <= WarningDistance ):
                     if(self.obstacle_distance <= DangerDistance):
                         if(self.state != 'AVOID_OBSTACLE_STATE' ):
-                            print("From state %s to AVOID_OBSTACLE_STATE"%self.state)
+                            rospy.loginfo("From state %s to AVOID_OBSTACLE_STATE"%self.state)
                         self.state = 'AVOID_OBSTACLE_STATE'
                         self.follow_wall_choosen = 'NONE'
 
@@ -303,10 +335,12 @@ class Go2GoalAction(object):
                     # TODO: When in FOLLOW_WALL state , what conditions to go back to Go2GoalState ?
                     #       1. There is no obstacle between Goal and Turtlebot3
                     #       2. There is no obstacle before Turtlebot3
-                    #       3. Turtlebot3 go to another size of obstacle
+                    #       3. Turtlebot3 go to another side of obstacle
                     #       4. If current distance from Turtlebot to Goal is smaller than last time
                     #endregion
                     elif(self.follow_wall_choosen == 'NONE'):
+                        # 機器人繞到障礙物的另一面
+                        self._pose_when_start_follow_wall = msg
                         if(ip_c > 0.0):
                             if(self.state != 'FOLLOW_CLOCKWISE'):
                                 rospy.loginfo("From state %s to FOLLOW_CLOCKWISE"%self.state)
@@ -323,27 +357,72 @@ class Go2GoalAction(object):
                             self.follow_wall_choosen = "COUNTER_CLOCKWISE"
                             self.state = 'FOLLOW_COUNTER_CLOCKWISE'
                     else:
-                        current_distant_to_goal = self.EuclideanDistance(self.GoalOfRobot , msg.pose.pose.position)
+                        # 機器人與目標的距離減少
+                        # current_distant_to_goal = self.EuclideanDistance(self.GoalOfRobot , msg.pose.pose.position)
+                        # can_go_to_next_state = current_distant_to_goal < self.last_distance_to_goal
+                        # 機器人與目標之間沒有障礙物
+                        goal_pose = [ self.GoalOfRobot.x , self.GoalOfRobot.y ]
+                        robot_to_goal_direction = (self._vector2direction(goal_pose) - pi / 2 + 2*pi )%(2*pi)
+                        robot_to_goal_direction_index = int( floor( (( robot_to_goal_direction - self.direction + 2*pi )%( 2*pi ) - self.LaserScanMsg.angle_min )/self.LaserScanMsg.angle_increment ) )
+                        can_go_to_next_state = True
+                        for idx in range(360):
+                            degree_between_goal_and_idx = abs(robot_to_goal_direction_index - idx)*self.LaserScanMsg.angle_increment
+                            idx_y = sin(degree_between_goal_and_idx)
+                            idx_x = cos(degree_between_goal_and_idx)
+                            if(0 <= idx_y <= 3.6 and -0.2 <= idx_x <= 0.2):
+                                can_go_to_next_state = False
+                                break
+                        if(can_go_to_next_state):
+                            rospy.loginfo("No Obstacle between robot and goal")
+                        else:
+                            rospy.loginfo("Obstacle between robot and goal")
+
+                        # 機器人繞到障礙物的另一面
+                        # # TODO : 如何確認是繞到另一邊而不是剛開始Follow Wall ?
+                        # # Get f(x,y) of line from _pose_when_start_follow_wall to Goal
+                        # can_go_to_next_state = False
+                        # if(self.EuclideanDistance(msg.pose.pose.position,self._pose_when_start_follow_wall) > 0.1): # We have walk for some time after FollowWall
+                        #     [x0 , y0] = [ self._pose_when_start_follow_wall.x , self._pose_when_start_follow_wall.y ]
+                        #     [x1 , y1] = [ self.GoalOfRobot.x , self.GoalOfRobot.y ]
+                        #     [x2 , y2] = [ msg.pose.pose.position.x , msg.pose.pose.position.y ]
+                        #     distance_pose_to_line = float('inf')
+                        #     if( x0 - x1 == 0 ):
+                        #         distance_pose_to_line = abs(x1 - x2)
+                        #     else:
+                        #         # mx + c = y
+                        #         m = (y0 - y1)/(x0 - x1)
+                        #         c = (y0*x1 - y1*x0)/(x1 - x0)
+                        #         # 點到直線的距離
+                        #         # mx - y +c = 0
+                        #         a = m
+                        #         b = -1
+                        #         c = c
+                        #         distance_pose_to_line = abs( m*x2 + b*y2 + c )/sqrt(m**2 + 1)
+                        #     if(distance_pose_to_line <= DistanceError):
+                        #         can_go_to_next_state = True
+
                         if(self.follow_wall_choosen == "CLOCKWISE"):
                             if(self.state != 'FOLLOW_CLOCKWISE'):
                                 rospy.loginfo("From state %s to FOLLOW_CLOCKWISE"%self.state)
 
-                            if(current_distant_to_goal < self.last_distance_to_goal):
+                            if(can_go_to_next_state):
                                 # Get Next state
                                 if(self.obstacle_distance <= FollowWallDistance ):
                                     self.state = 'FOLLOW_CLOCKWISE'
                                 else:
+                                    rospy.loginfo("From state %s to GO2GOALSTATE"%self.state)
                                     self.state = 'GO2GOALSTATE'
                             else:
                                 self.state = 'FOLLOW_CLOCKWISE'
                         else:
                             if(self.state != 'FOLLOW_COUNTER_CLOCKWISE'):
                                 rospy.loginfo("From state %s to FOLLOW_COUNTER_CLOCKWISE"%self.state)
-                            if(current_distant_to_goal < self.last_distance_to_goal):
+                            if(can_go_to_next_state):
                                 # Get Next state
                                 if(self.obstacle_distance <= FollowWallDistance ):
                                     self.state = 'FOLLOW_COUNTER_CLOCKWISE'
                                 else:
+                                    rospy.loginfo("From state %s to GO2GOALSTATE"%self.state)
                                     self.state = 'GO2GOALSTATE'
                             else:
                                 self.state = 'FOLLOW_COUNTER_CLOCKWISE'

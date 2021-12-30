@@ -20,8 +20,8 @@ echo 'Start RobotNavigation'
 tmux new-window -t turtlebot3simulation:5 -n 'GMapping' 'roslaunch turtlebot3_slam turtlebot3_slam.launch slam_methods:=gmapping open_rviz:=false configuration_basename:=turtlebot3_lds_2d_gazebo.lua'
 echo 'Start Cartographer'
 
-tmux new-window -t turtlebot3simulation:6 -n 'Teleop' 'roslaunch turtlebot3_teleop turtlebot3_teleop_key.launch'
-echo 'Start Keyboard controllor'
+# tmux new-window -t turtlebot3simulation:6 -n 'Teleop' 'roslaunch turtlebot3_teleop turtlebot3_teleop_key.launch'
+# echo 'Start Keyboard controllor'
 
 tmux select-window -t turtlebot3simulation:4
 tmux -2 attach-session -t turtlebot3simulation
